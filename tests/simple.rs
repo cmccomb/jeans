@@ -1,7 +1,18 @@
 use jeans;
 
-fn main() {
+#[test]
+fn simple() {
 
+    // Instantiate and define settings
+    let mut settings = jeans::Settings::default();
+
+    // Create optimizer and solve
+    let mut opt = jeans::Optimizer::new(settings);
+    opt.solve();
+}
+
+#[test]
+fn medium() {
     // Instantiate and define settings
     let mut settings = jeans::Settings::default();
     settings.set_fitness_function(jeans::functions::sphere);

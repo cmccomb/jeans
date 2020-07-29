@@ -5,11 +5,18 @@
     solutions can be represented as a vector of floating point values.
 !*/
 
-
 use rand::Rng;
 use rand::seq::SliceRandom;
 
-/// This module provides access to functions commonly used for optimization
+/// This module provides access to fitness functions commonly used for optimization.
+///
+/// These make it very easy to start using `jeans`. For example, you can use one of these built-in
+/// functions to quickly modify the fitness function used:
+/// ```
+/// let mut set = jeans::Settings::default();
+/// set.set_fitness_function(jeans::functions::sphere);
+/// ```
+/// Note that [`jeans::Settings::default()`](struct.Settings.html#fields) will use [`jeans::functions::summation`](fn.summation.html) by default.
 pub mod functions {
     /// This function simply sums the elements of the vector
     pub fn summation(x: Vec<f64>) -> f64 {
@@ -26,7 +33,20 @@ pub mod functions {
     }
 }
 
-/// This is a settings object for storing all of the settings we might care about for a GA.
+/// A settings object for storing all of the settings we might care about for a GA.
+///
+/// You should usually instantiate this using the default method. All member variables of this struct
+/// are public, which makes editing this easy. In most cases, simply reassign the member variables:
+/// ```
+/// let mut set = jeans::Settings::default();
+/// set.elitism = false;
+/// ```
+/// The most notable exception is for the `fitness_function` field. To set that, you have to use a
+/// special method:
+/// ```
+/// let mut set = jeans::Settings::default();
+/// set.set_fitness_function(| x: Vec<f64> | x[0] + x[1])
+/// ```
 pub struct Settings {
     /// The size of the population
     pub population_size: u32,
@@ -40,15 +60,15 @@ pub struct Settings {
     pub verbose: bool,
     /// A `bool` indicating whether or not to implement elitism
     pub elitism: bool,
-    ///
+    /// The fraction of each generation that should be carried forward via elitism
     pub elitism_fraction: f64,
-    ///
+    /// Whether the package should maximize fitness (`true`) or minimize fitness (`false`)
     pub maximize_fitness: bool,
-    ///
+    /// The number of dimensions of the problem space
     pub number_of_dimensions: u32,
-    ///
+    /// The upper bounds for each dimension of the problem space
     pub upper_bound: Vec<f64>,
-    ///
+    /// The lower bounds for each dimension of the problem space
     pub lower_bound: Vec<f64>,
     /// The fitness function used to evaluate how good solutions are
     pub fitness_function: Box<dyn FnMut(Vec<f64>) -> f64>,
@@ -76,6 +96,29 @@ impl Default for Settings {
 
 impl Settings {
     /// This functions allows you to set the fitness function
+    ///
+    /// For instance, you can use one of hte built-in function found [here](functions/index.html#functions):
+    /// ```
+    /// let mut set = jeans::Settings::default();
+    /// set.set_fitness_function(jeans::functions::sphere);
+    /// ```
+    /// Or you can use a lambda to impleemtn your own:
+    /// ```
+    /// let mut set = jeans::Settings::default();
+    /// set.set_fitness_function(| x | x[0] + x[1]);
+    /// ```
+    /// Or you can define and use a completely new function
+    /// ```
+    /// fn fitness_whole_pizza(x: Vec<f64>) -> f64 {
+    ///     let mut fx = 0f64;
+    ///     for i in 0..x.len() {
+    ///         fx *= x[i]
+    ///     }
+    ///     fx
+    /// }
+    /// let mut set = jeans::Settings::default();
+    /// set.set_fitness_function(fitness_whole_pizza);
+    /// ```
     pub fn set_fitness_function<F: 'static + FnMut(Vec<f64>) -> f64>(&mut self, f: F) {
         self.fitness_function = Box::new(f);
     }
@@ -83,6 +126,15 @@ impl Settings {
 
 
 /// This is an optimizer object. It does the actual heavy lifting.
+///
+/// In order to use the optimizer you first need to create a [`Settings`](struct.Settings.html) struct. That can then be
+/// passed to an `Optimizer` struct, and the `solve` method can be called to actually solve the problem.
+/// ```
+/// let mut set = jeans::Settings::default();
+/// let mut opt = jeans::Optimizer::new(set);
+/// opt.solve();
+/// ```
+/// In order to implement and use custom fitness functions, please see [`Settings::set_fitness_function`](struct.Settings.html#impl)
 pub struct Optimizer {
     settings: Settings,
     current_population: Population,
@@ -115,8 +167,7 @@ impl Optimizer {
         println!("{}", self.best_fitness);
     }
 
-    ///
-    pub fn iterate(&mut self) {
+    fn iterate(&mut self) {
         // New population
         let mut new_population = Population::empty();
 
@@ -209,9 +260,36 @@ impl Population {
 }
 
 
-//////////////////////////////////////////
-//// Individual
-//////////////////////////////////////////
+#[cfg(test)]
+mod population_tests {
+    use super::*;
+
+    #[test]
+    fn basic_inst() {
+        let x = Population::new(&mut Settings::default());
+    }
+
+    #[test]
+    fn empty_inst() {
+        let x = Population::empty();
+    }
+
+    #[test]
+    fn sort_check() {
+        let mut x = Population::new(&mut Settings::default());
+        x.sort();
+    }
+
+    #[test]
+    fn stat_check() {
+        let x = Population::new(&mut Settings::default());
+        x.get_best();
+        x.get_mean();
+        x.get_std();
+    }
+}
+
+/// This structure is for an individual, essentially represnetative of a single solution
 struct Individual {
     representation: Vec<f64>,
     fitness: f64,
@@ -240,5 +318,35 @@ impl Individual {
     // TODO: Make this actual mutation
     fn mutate(&self) -> Self {
         self.clone()
+    }
+}
+
+#[cfg(test)]
+mod individual_tests {
+    use super::*;
+
+    #[test]
+    fn basic_inst() {
+        let x = Individual {
+            representation: vec![0.0, 0.0],
+            fitness: 0.0
+        };
+    }
+
+    #[test]
+    fn settings_inst() {
+        let x = Individual::new(&mut Settings::default());
+    }
+
+    #[test]
+    fn clone_check() {
+        let x = Individual::new(&mut Settings::default());
+        let y = x.clone();
+    }
+
+    #[test]
+    fn mutate_check() {
+        let x = Individual::new(&mut Settings::default());
+        let y = x.mutate();
     }
 }
