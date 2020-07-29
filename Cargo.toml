@@ -6,6 +6,8 @@ edition = "2018"
 repository = "https://github.com/cmccomb/jeans"
 homepage = "https://github.com/cmccomb/jeans"
 documentation = "http://doc.rust-lang.org/jeans"
+description = "Genetic algorithms"
+license =
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
