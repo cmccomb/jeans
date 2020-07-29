@@ -1,15 +1,13 @@
 [package]
 name = "jeans"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Chris McComb <ccmcc2012@gmail.com>"]
 edition = "2018"
 repository = "https://github.com/cmccomb/jeans"
 homepage = "https://github.com/cmccomb/jeans"
-documentation = "http://doc.rust-lang.org/jeans"
+documentation = "http://docs.rs/jeans"
 description = "Genetic algorithms"
 license = "MIT OR Apache-2.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 rand = "0.7.3"
