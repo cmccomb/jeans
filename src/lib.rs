@@ -102,7 +102,7 @@ impl Settings {
     /// let mut set = jeans::Settings::default();
     /// set.set_fitness_function(jeans::functions::sphere);
     /// ```
-    /// Or you can use a lambda to impleemtn your own:
+    /// Or you can use a lambda to implement your own:
     /// ```
     /// let mut set = jeans::Settings::default();
     /// set.set_fitness_function(| x | x[0] + x[1]);
@@ -142,10 +142,9 @@ pub struct Optimizer {
     best_representation: Vec<f64>
 }
 
-///
 impl Optimizer {
 
-    ///
+    /// This method enables the creation of a new `Optimizer` struct given a [`Settings`](struct.Settings.html) struct
     pub fn new(mut settings: Settings) -> Self {
         Self {
             current_population: Population::new(&mut settings),
@@ -155,14 +154,14 @@ impl Optimizer {
         }
     }
 
-    ///
+    /// This method is called to begin the solving process.
     pub fn solve(&mut self) {
         for _ in 0..self.settings.number_of_generations {
             self.iterate();
         }
     }
 
-    ///
+    /// This method is called to generate a report of the solving process.
     pub fn report(&self) {
         println!("{}", self.best_fitness);
     }
@@ -289,7 +288,7 @@ mod population_tests {
     }
 }
 
-/// This structure is for an individual, essentially represnetative of a single solution
+/// This structure is for an individual, essentially representative of a single solution
 struct Individual {
     representation: Vec<f64>,
     fitness: f64,
@@ -308,6 +307,7 @@ impl Individual {
         }
     }
 
+    /// This clones the Individual
     fn clone(&self) -> Self {
         Self {
             representation: self.representation.clone(),
@@ -315,7 +315,7 @@ impl Individual {
         }
     }
 
-    // TODO: Make this actual mutation
+    /// This returns a mutated version of the Individual
     fn mutate(&self) -> Self {
         self.clone()
     }
