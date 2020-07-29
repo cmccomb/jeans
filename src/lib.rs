@@ -8,30 +8,7 @@
 use rand::Rng;
 use rand::seq::SliceRandom;
 
-/// This module provides access to fitness functions commonly used for optimization.
-///
-/// These make it very easy to start using `jeans`. For example, you can use one of these built-in
-/// functions to quickly modify the fitness function used:
-/// ```
-/// let mut set = jeans::Settings::default();
-/// set.set_fitness_function(jeans::functions::sphere);
-/// ```
-/// Note that [`jeans::Settings::default()`](struct.Settings.html#fields) will use [`jeans::functions::summation`](fn.summation.html) by default.
-pub mod functions {
-    /// This function simply sums the elements of the vector
-    pub fn summation(x: Vec<f64>) -> f64 {
-        x.iter().sum()
-    }
-
-    /// This function sums the square of the elements of the vector
-    pub fn sphere(x: Vec<f64>) -> f64 {
-        let mut f = 0f64;
-        for i in 0..x.len() {
-            f += x[i]*x[i];
-        }
-        f
-    }
-}
+pub mod functions;
 
 /// A settings object for storing all of the settings we might care about for a GA.
 ///
@@ -78,7 +55,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            fitness_function: Box::new(functions::summation),
+            fitness_function: Box::new(crate::functions::summation),
             population_size: 100,
             number_of_generations: 100,
             crossover_probability: 0.8,
@@ -289,13 +266,14 @@ mod population_tests {
 }
 
 /// This structure is for an individual, essentially representative of a single solution
-struct Individual {
+/// This structure is for an individual, essentially representative of a single solution
+pub struct Individual {
     representation: Vec<f64>,
     fitness: f64,
 }
 
 impl Individual {
-    fn new(sets: &mut Settings) -> Self {
+    fn new(sets: &mut crate::Settings) -> Self {
         let mut rng = rand::thread_rng();
         let mut v: Vec<f64> = vec![];
         for i in 0..sets.number_of_dimensions as usize {
@@ -321,6 +299,11 @@ impl Individual {
     }
 }
 
+// trait Problem {
+//     fn evaluate(&self);
+//     fn mutate(&self) -> Self;
+// }
+
 #[cfg(test)]
 mod individual_tests {
     use super::*;
@@ -335,18 +318,18 @@ mod individual_tests {
 
     #[test]
     fn settings_inst() {
-        let x = Individual::new(&mut Settings::default());
+        let x = Individual::new(&mut crate::Settings::default());
     }
 
     #[test]
     fn clone_check() {
-        let x = Individual::new(&mut Settings::default());
+        let x = Individual::new(&mut crate::Settings::default());
         let y = x.clone();
     }
 
     #[test]
     fn mutate_check() {
-        let x = Individual::new(&mut Settings::default());
+        let x = Individual::new(&mut crate::Settings::default());
         let y = x.mutate();
     }
 }
