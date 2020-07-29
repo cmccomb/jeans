@@ -80,7 +80,7 @@ impl Settings {
         if self.maximize_fitness {
             self.fitness_function = Box::new(f);
         } else {
-            self.fitness_function = Box::new(-f);
+            self.fitness_function = -1.0*Box::new(f);
         }
     }
 }
