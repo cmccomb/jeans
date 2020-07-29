@@ -7,7 +7,7 @@ repository = "https://github.com/cmccomb/jeans"
 homepage = "https://github.com/cmccomb/jeans"
 documentation = "http://doc.rust-lang.org/jeans"
 description = "Genetic algorithms"
-license =
+license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
