@@ -77,11 +77,7 @@ impl Default for Settings {
 impl Settings {
     /// This functions allows you to set the fitness function
     pub fn set_fitness_function<F: 'static + FnMut(Vec<f64>) -> f64>(&mut self, f: F) {
-        if self.maximize_fitness {
-            self.fitness_function = Box::new(f);
-        } else {
-            self.fitness_function = -1.0*Box::new(f);
-        }
+        self.fitness_function = Box::new(f);
     }
 }
 
