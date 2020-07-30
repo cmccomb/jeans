@@ -115,6 +115,7 @@ impl Settings {
 pub struct Optimizer {
     settings: Settings,
     current_population: Population,
+    new_population: Population,
     best_fitness: f64,
     best_representation: Vec<f64>
 }
@@ -125,6 +126,7 @@ impl Optimizer {
     pub fn new(mut settings: Settings) -> Self {
         Self {
             current_population: Population::new(&mut settings),
+            new_population: Population::empty(),
             settings: settings,
             best_fitness: -f64::INFINITY,
             best_representation: vec![]
@@ -143,43 +145,74 @@ impl Optimizer {
         println!("{}", self.best_fitness);
     }
 
-    fn iterate(&mut self) {
-        // New population
-        let mut new_population = Population::empty();
-
-        // Elitism
-        if self.settings.elitism {
-            let number_of_elites: f64 = self.settings.elitism_fraction * self.settings.population_size as f64;
-            for i in (self.settings.population_size as usize - number_of_elites as usize)..self.settings.population_size as usize{
-                new_population.individuals.push(self.current_population.individuals[i].clone())
+    fn check_bounds(&self, x: Individual) -> bool {
+        let mut state = true;
+        for i in 0..self.settings.number_of_dimensions as usize{
+            if x.representation[i] < self.settings.lower_bound[i] ||
+                x.representation[i] > self.settings.upper_bound[i] {
+                state = false;
             }
         }
+        state
+    }
+
+    fn iterate(&mut self) {
+        // Elitism
+        self.implement_elitism();
 
         // Crossover
+        self.implement_crossover();
 
         // Mutation
-        for i in 0..self.settings.population_size as usize {
-            let mut rng = rand::thread_rng();
-            if rng.gen::<f64>() < self.settings.mutation_probability {
-                new_population.individuals.push(self.current_population.individuals[i].mutate())
-            }
-        }
+        self.implement_mutation();
 
         //Fill in the rest
-        while new_population.individuals.len() < self.settings.population_size as usize {
-            new_population.individuals.push(Individual::new(&mut self.settings));
-        }
+        self.fill_population();
 
         // Get best
-        self.current_population = new_population;
+        self.current_population = self.new_population.copy();
         if self.current_population.get_best() > self.best_fitness {
             self.best_fitness = self.current_population.get_best();
         }
 
         // Sort
         self.current_population.sort();
-
+        self.new_population = Population::empty();
         self.report();
+    }
+
+    fn implement_elitism(&mut self) {
+        // Elitism
+        if self.settings.elitism {
+            let number_of_elites: f64 = self.settings.elitism_fraction * self.settings.population_size as f64;
+            for i in (self.settings.population_size as usize - number_of_elites as usize)..self.settings.population_size as usize{
+                self.new_population.individuals.push(self.current_population.individuals[i].clone())
+            }
+        }
+    }
+
+    fn implement_crossover(&mut self) {
+        let number_of_crosses: f64 = self.settings.crossover_probability * self.settings.population_size as f64;
+        for i in (self.settings.population_size as usize - number_of_crosses as usize)..self.settings.population_size as usize{
+            let thingone = self.current_population.get_random();
+            let thingtwo = self.current_population.get_random();
+            self.new_population.individuals.push(thingone.cross(thingtwo))
+        }
+    }
+
+    fn implement_mutation(&mut self) {
+        for i in 0..self.settings.population_size as usize {
+            let mut rng = rand::thread_rng();
+            if rng.gen::<f64>() < self.settings.mutation_probability {
+                self.new_population.individuals.push(self.current_population.individuals[i].mutate())
+            }
+        }
+    }
+
+    fn fill_population(&mut self) {
+        while self.new_population.individuals.len() < self.settings.population_size as usize {
+            self.new_population.individuals.push(Individual::new(&mut self.settings));
+        }
     }
 }
 
@@ -208,6 +241,14 @@ impl Population {
         }
     }
 
+    fn copy(&self) -> Self {
+        let mut pop = Population::empty();
+        for indi in &self.individuals {
+            pop.individuals.push((*indi).clone());
+        }
+        pop
+    }
+
     fn get_best(&self) -> f64 {
         let mut best_fitness = -f64::INFINITY;
         for i in 0..(*self).individuals.len() {
@@ -226,8 +267,13 @@ impl Population {
 
     }
 
-    fn get_random(&mut self) -> Option<&mut Individual> {
-        self.individuals.choose_mut(&mut rand::thread_rng())
+    fn get_random(&mut self) -> Individual {
+        let option = self.individuals.choose_mut(&mut rand::thread_rng());
+        match option {
+            Some(x) => (*x).clone(),
+            None => self.individuals[self.individuals.len()-1].clone()
+        }
+
     }
 
     fn sort(&mut self) {
@@ -266,13 +312,13 @@ mod population_tests {
 }
 
 /// This structure is for an individual, essentially representative of a single solution
-/// This structure is for an individual, essentially representative of a single solution
 pub struct Individual {
     representation: Vec<f64>,
     fitness: f64,
 }
 
 impl Individual {
+    /// This creates a new individual
     fn new(sets: &mut crate::Settings) -> Self {
         let mut rng = rand::thread_rng();
         let mut v: Vec<f64> = vec![];
@@ -297,12 +343,27 @@ impl Individual {
     fn mutate(&self) -> Self {
         self.clone()
     }
+
+    /// Crossover
+    fn cross(&self, other_individual: Self) -> Self {
+        let mut v = vec![];
+        let mut rng = rand::thread_rng();
+        for i in 0..self.representation.len() {
+            if rng.gen::<f64>() < 0.5 {
+                v.push(self.representation[i])
+            } else {
+                v.push(other_individual.representation[i])
+            }
+        }
+
+        Self {
+            representation: v,
+            fitness: 0.0
+        }
+
+    }
 }
 
-// trait Problem {
-//     fn evaluate(&self);
-//     fn mutate(&self) -> Self;
-// }
 
 #[cfg(test)]
 mod individual_tests {

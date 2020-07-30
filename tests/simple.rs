@@ -4,7 +4,7 @@ use jeans;
 fn simple() {
 
     // Instantiate and define settings
-    let mut settings = jeans::Settings::default();
+    let settings = jeans::Settings::default();
 
     // Create optimizer and solve
     let mut opt = jeans::Optimizer::new(settings);
