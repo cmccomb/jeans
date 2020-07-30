@@ -8,7 +8,8 @@
 use rand::Rng;
 use rand::seq::SliceRandom;
 
-pub mod functions;
+///
+use benchmark_functions;
 
 /// A settings object for storing all of the settings we might care about for a GA.
 ///
@@ -55,14 +56,14 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            fitness_function: Box::new(crate::functions::summation),
+            fitness_function: Box::new(benchmark_functions::Sphere::f),
             population_size: 100,
             number_of_generations: 100,
-            crossover_probability: 0.8,
-            mutation_probability: 0.1,
+            crossover_probability: 0.5,
+            mutation_probability: 0.05,
             verbose: true,
             elitism: true,
-            elitism_fraction: 0.2,
+            elitism_fraction: 0.1,
             maximize_fitness: true,
             number_of_dimensions: 2,
             upper_bound: vec![ 1.0,  1.0],
@@ -77,7 +78,7 @@ impl Settings {
     /// For instance, you can use one of hte built-in function found [here](functions/index.html#functions):
     /// ```
     /// let mut set = jeans::Settings::default();
-    /// set.set_fitness_function(jeans::functions::sphere);
+    /// set.set_fitness_function(benchmark_functions::Sphere::f);
     /// ```
     /// Or you can use a lambda to implement your own:
     /// ```
@@ -142,7 +143,7 @@ impl Optimizer {
 
     /// This method is called to generate a report of the solving process.
     pub fn report(&self) {
-        println!("{}", self.best_fitness);
+        println!("{}, {}", self.best_fitness, self.current_population.get_mean());
     }
 
     fn check_bounds(&self, x: Individual) -> bool {
@@ -193,10 +194,12 @@ impl Optimizer {
 
     fn implement_crossover(&mut self) {
         let number_of_crosses: f64 = self.settings.crossover_probability * self.settings.population_size as f64;
-        for i in (self.settings.population_size as usize - number_of_crosses as usize)..self.settings.population_size as usize{
+        for _ in (self.settings.population_size as usize - number_of_crosses as usize)..self.settings.population_size as usize{
             let thingone = self.current_population.get_random();
             let thingtwo = self.current_population.get_random();
-            self.new_population.individuals.push(thingone.cross(thingtwo))
+            let mut newthing = thingone.cross(thingtwo);
+            newthing.fitness = (self.settings.fitness_function)(newthing.clone().representation);
+            self.new_population.individuals.push(newthing);
         }
     }
 
@@ -259,7 +262,12 @@ impl Population {
         best_fitness
     }
 
-    fn get_mean(&self) {
+    fn get_mean(&self) -> f64 {
+        let mut sum_fitness = 0f64;
+        for i in 0..(*self).individuals.len() {
+            sum_fitness += self.individuals[i].fitness;
+        }
+        sum_fitness / (self.individuals.len()as f64)
 
     }
 

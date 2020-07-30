@@ -10,7 +10,8 @@ documentation = "http://docs.rs/jeans"
 description = "Genetic algorithms"
 license = "MIT OR Apache-2.0"
 keywords = ["optimization", "genetic", "heuristic", "stochastic"]
-categoreis = ["algorithms", "mathematics", "science"]
+categories = ["algorithms", "mathematics", "science"]
 
 [dependencies]
 rand = "0.7.3"
+benchmark_functions = "*"
