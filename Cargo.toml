@@ -14,4 +14,4 @@ categories = ["algorithms", "mathematics", "science"]
 
 [dependencies]
 rand = "0.7.3"
-benchmark_functions = "*"
+benchfun = "*"

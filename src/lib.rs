@@ -8,8 +8,8 @@
 use rand::Rng;
 use rand::seq::SliceRandom;
 
-///
-use benchmark_functions;
+/// This imports a [related library](https://crates.io/crates/benchfun).
+use benchfun::*;
 
 /// A settings object for storing all of the settings we might care about for a GA.
 ///
@@ -56,7 +56,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            fitness_function: Box::new(benchmark_functions::Sphere::f),
+            fitness_function: Box::new(benchfun::single::Sphere::f),
             population_size: 100,
             number_of_generations: 100,
             crossover_probability: 0.5,
@@ -77,8 +77,9 @@ impl Settings {
     ///
     /// For instance, you can use one of hte built-in function found [here](functions/index.html#functions):
     /// ```
+    /// use benchfun::*;
     /// let mut set = jeans::Settings::default();
-    /// set.set_fitness_function(benchmark_functions::Sphere::f);
+    /// set.set_fitness_function(benchfun::single::Sphere::f);
     /// ```
     /// Or you can use a lambda to implement your own:
     /// ```

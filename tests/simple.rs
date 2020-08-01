@@ -1,4 +1,5 @@
 use jeans;
+use benchfun::*;
 
 #[test]
 fn simple() {
@@ -15,7 +16,7 @@ fn simple() {
 fn medium() {
     // Instantiate and define settings
     let mut settings = jeans::Settings::default();
-    settings.set_fitness_function(benchmark_functions::Rastrigin::f);
+    settings.set_fitness_function(benchfun::single::Rastrigin::f);
     settings.number_of_generations = 100;
     settings.population_size = 10;
     settings.lower_bound = vec![0.0, 0.0];
