@@ -102,3 +102,16 @@ let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 let report = engine.run(&mut rng)?;
 println!("found {} non-dominated solutions", report.pareto_solutions.len());
 ```
+
+## Examples
+
+The crate ships runnable examples that showcase the higher-level engines:
+
+- `cargo run --example simple_ga` optimizes the Sphere function with explicit
+  SBX crossover and polynomial mutation parameters.
+- `cargo run --example expensive_async` demonstrates building a
+  `tokio`-powered
+  [`AsyncProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.AsyncProblem.html)
+  that simulates an expensive evaluation before reporting fitness.
+- `cargo run --example nsga2_example` runs NSGA-II on a two-objective
+  cantilever beam design study, reporting the first few Pareto-optimal designs.
