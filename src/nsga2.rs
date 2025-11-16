@@ -723,7 +723,7 @@ fn component_wise_median(objectives: &[&[f64]]) -> Vec<f64> {
         let mut values: Vec<f64> = objectives.iter().map(|objective| objective[dim]).collect();
         values.sort_by(f64::total_cmp);
         let mid = values.len() / 2;
-        if values.len() % 2 == 0 {
+        if values.len().is_multiple_of(2) {
             medians.push(f64::midpoint(values[mid - 1], values[mid]));
         } else {
             medians.push(values[mid]);
@@ -818,5 +818,43 @@ mod tests {
         assert_eq!(report.experiment.final_population.len(), 8);
         assert!(report.experiment.best_individual.is_some());
         assert!(report.experiment.stats.generations() > 0);
+    }
+
+    #[test]
+    fn component_wise_median_handles_even_objective_counts() {
+        let objective_a = [1.0, 20.0];
+        let objective_b = [3.0, 10.0];
+        let objective_c = [5.0, 40.0];
+        let objective_d = [7.0, 30.0];
+
+        let medians = component_wise_median(&[
+            objective_a.as_slice(),
+            objective_b.as_slice(),
+            objective_c.as_slice(),
+            objective_d.as_slice(),
+        ]);
+
+        assert_eq!(medians, vec![4.0, 25.0]);
+    }
+
+    #[test]
+    fn component_wise_median_handles_odd_objective_counts() {
+        let objective_a = [2.0, 4.0];
+        let objective_b = [6.0, 1.0];
+        let objective_c = [8.0, 9.0];
+
+        let medians = component_wise_median(&[
+            objective_a.as_slice(),
+            objective_b.as_slice(),
+            objective_c.as_slice(),
+        ]);
+
+        assert_eq!(medians, vec![6.0, 4.0]);
+    }
+
+    #[test]
+    fn component_wise_median_handles_empty_input() {
+        let medians = component_wise_median(&[]);
+        assert!(medians.is_empty());
     }
 }

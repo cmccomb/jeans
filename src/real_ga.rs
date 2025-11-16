@@ -544,7 +544,7 @@ fn median_fitness_value(values: &[f64]) -> f64 {
     let mut sorted = values.to_vec();
     sorted.sort_by(f64::total_cmp);
     let mid = sorted.len() / 2;
-    if sorted.len() % 2 == 0 {
+    if sorted.len().is_multiple_of(2) {
         f64::midpoint(sorted[mid - 1], sorted[mid])
     } else {
         sorted[mid]
@@ -762,5 +762,25 @@ mod tests {
         assert_eq!(report.generations, 1);
         assert_eq!(report.best_solution.len(), 2);
         assert!(report.best_fitness.is_finite());
+    }
+
+    #[test]
+    fn median_fitness_value_handles_even_population_sizes() {
+        let fitness = [4.0, 8.0, 1.0, 7.0];
+        let median = median_fitness_value(&fitness);
+        assert!((median - 5.5).abs() <= f64::EPSILON);
+    }
+
+    #[test]
+    fn median_fitness_value_handles_odd_population_sizes() {
+        let fitness = [3.0, 9.0, 1.0];
+        let median = median_fitness_value(&fitness);
+        assert!((median - 3.0).abs() <= f64::EPSILON);
+    }
+
+    #[test]
+    fn median_fitness_value_returns_nan_for_empty_populations() {
+        let median = median_fitness_value(&[]);
+        assert!(median.is_nan());
     }
 }
