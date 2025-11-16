@@ -1,15 +1,18 @@
+#![allow(unknown_lints)]
 #![warn(missing_docs)]
-#![warn(missing_doc_code_examples)]
+#![warn(rustdoc::missing_doc_code_examples)]
 
 /*! This is a crate for implementing genetic algorithms. Specifically, this is for algorithms whose
     solutions can be represented as a vector of floating point values.
 !*/
 
 use rand::Rng;
-use rand::seq::SliceRandom;
+use std::convert::TryFrom;
 
 /// This imports a [related library](https://crates.io/crates/benchfun).
-use benchfun::*;
+use benchfun::SingleObjective;
+pub mod core;
+pub use crate::core::{Chromosome, Gene, Individual, Population};
 
 /// A settings object for storing all of the settings we might care about for a GA.
 ///
@@ -66,7 +69,7 @@ impl Default for Settings {
             elitism_fraction: 0.1,
             maximize_fitness: true,
             number_of_dimensions: 2,
-            upper_bound: vec![ 1.0,  1.0],
+            upper_bound: vec![1.0, 1.0],
             lower_bound: vec![-1.0, -1.0],
         }
     }
@@ -103,7 +106,6 @@ impl Settings {
     }
 }
 
-
 /// This is an optimizer object. It does the actual heavy lifting.
 ///
 /// In order to use the optimizer you first need to create a [`Settings`](struct.Settings.html) struct. That can then be
@@ -119,19 +121,19 @@ pub struct Optimizer {
     current_population: Population,
     new_population: Population,
     best_fitness: f64,
-    best_representation: Vec<f64>
+    best_representation: Vec<f64>,
 }
 
 impl Optimizer {
-
     /// This method enables the creation of a new `Optimizer` struct given a [`Settings`](struct.Settings.html) struct
+    #[must_use]
     pub fn new(mut settings: Settings) -> Self {
         Self {
             current_population: Population::new(&mut settings),
             new_population: Population::empty(),
-            settings: settings,
+            settings,
             best_fitness: -f64::INFINITY,
-            best_representation: vec![]
+            best_representation: vec![],
         }
     }
 
@@ -144,18 +146,11 @@ impl Optimizer {
 
     /// This method is called to generate a report of the solving process.
     pub fn report(&self) {
-        println!("{}, {}", self.best_fitness, self.current_population.get_mean());
-    }
-
-    fn check_bounds(&self, x: Individual) -> bool {
-        let mut state = true;
-        for i in 0..self.settings.number_of_dimensions as usize{
-            if x.representation[i] < self.settings.lower_bound[i] ||
-                x.representation[i] > self.settings.upper_bound[i] {
-                state = false;
-            }
-        }
-        state
+        println!(
+            "{}, {}",
+            self.best_fitness,
+            self.current_population.get_mean()
+        );
     }
 
     fn iterate(&mut self) {
@@ -173,8 +168,11 @@ impl Optimizer {
 
         // Get best
         self.current_population = self.new_population.copy();
-        if self.current_population.get_best() > self.best_fitness {
-            self.best_fitness = self.current_population.get_best();
+        if let Some(best) = self.current_population.best_individual() {
+            if best.fitness() > self.best_fitness {
+                self.best_fitness = best.fitness();
+                self.best_representation = best.chromosome().genes().to_vec();
+            }
         }
 
         // Sort
@@ -186,220 +184,80 @@ impl Optimizer {
     fn implement_elitism(&mut self) {
         // Elitism
         if self.settings.elitism {
-            let number_of_elites: f64 = self.settings.elitism_fraction * self.settings.population_size as f64;
-            for i in (self.settings.population_size as usize - number_of_elites as usize)..self.settings.population_size as usize{
-                self.new_population.individuals.push(self.current_population.individuals[i].clone())
+            let population_size = self.population_size_usize();
+            let number_of_elites =
+                self.proportion_to_count(self.settings.elitism_fraction, population_size);
+            let start_index = self
+                .current_population
+                .len()
+                .saturating_sub(number_of_elites);
+            for elite in &self.current_population.individuals()[start_index..] {
+                self.new_population.push(elite.clone());
             }
         }
     }
 
     fn implement_crossover(&mut self) {
-        let number_of_crosses: f64 = self.settings.crossover_probability * self.settings.population_size as f64;
-        for _ in (self.settings.population_size as usize - number_of_crosses as usize)..self.settings.population_size as usize{
-            let thingone = self.current_population.get_random();
-            let thingtwo = self.current_population.get_random();
-            let mut newthing = thingone.cross(thingtwo);
-            newthing.fitness = (self.settings.fitness_function)(newthing.clone().representation);
-            self.new_population.individuals.push(newthing);
+        let population_size = self.population_size_usize();
+        let number_of_crosses =
+            self.proportion_to_count(self.settings.crossover_probability, population_size);
+        let mut rng = rand::thread_rng();
+        for _ in 0..number_of_crosses {
+            let parent_one = self.current_population.get_random();
+            let parent_two = self.current_population.get_random();
+            let mut offspring = parent_one.cross(&parent_two, &mut rng);
+            let fitness = (self.settings.fitness_function)(offspring.chromosome().genes().to_vec());
+            offspring.set_fitness(fitness);
+            self.new_population.push(offspring);
         }
     }
 
     fn implement_mutation(&mut self) {
-        for i in 0..self.settings.population_size as usize {
-            let mut rng = rand::thread_rng();
+        let mut rng = rand::thread_rng();
+        for individual in self.current_population.individuals() {
             if rng.gen::<f64>() < self.settings.mutation_probability {
-                self.new_population.individuals.push(self.current_population.individuals[i].mutate())
+                self.new_population.push(individual.mutate());
             }
         }
     }
 
     fn fill_population(&mut self) {
-        while self.new_population.individuals.len() < self.settings.population_size as usize {
-            self.new_population.individuals.push(Individual::new(&mut self.settings));
-        }
-    }
-}
-
-
-//////////////////////////////////////////
-//// Population
-//////////////////////////////////////////
-struct Population {
-    individuals: Vec<Individual>,
-}
-
-impl Population {
-    fn new(mut settings: &mut Settings) -> Self {
-        let mut pop = vec![];
-        for _ in 0..settings.population_size {
-            pop.push(Individual::new(&mut settings))
-        }
-        Self {
-            individuals: pop,
+        let population_size = self.population_size_usize();
+        while self.new_population.len() < population_size {
+            self.new_population
+                .push(Individual::new(&mut self.settings));
         }
     }
 
-    fn empty() -> Self {
-        Self {
-            individuals: vec![],
+    fn population_size_usize(&self) -> usize {
+        usize::try_from(self.settings.population_size).expect("population size must fit into usize")
+    }
+
+    fn proportion_to_count(&self, proportion: f64, population_size: usize) -> usize {
+        let clamped = proportion.clamp(0.0, 1.0);
+        let target = clamped * f64::from(self.settings.population_size);
+        Self::bounded_float_to_usize(target, population_size)
+    }
+
+    fn bounded_float_to_usize(value: f64, max: usize) -> usize {
+        if !value.is_finite() {
+            return 0;
+        }
+        let bounded = value.clamp(0.0, Self::usize_to_f64(max));
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
+        {
+            bounded.round() as usize
         }
     }
 
-    fn copy(&self) -> Self {
-        let mut pop = Population::empty();
-        for indi in &self.individuals {
-            pop.individuals.push((*indi).clone());
+    fn usize_to_f64(value: usize) -> f64 {
+        #[allow(clippy::cast_precision_loss)]
+        {
+            value as f64
         }
-        pop
-    }
-
-    fn get_best(&self) -> f64 {
-        let mut best_fitness = -f64::INFINITY;
-        for i in 0..(*self).individuals.len() {
-            if self.individuals[i].fitness > best_fitness {
-                best_fitness = self.individuals[i].fitness;
-            }
-        }
-        best_fitness
-    }
-
-    fn get_mean(&self) -> f64 {
-        let mut sum_fitness = 0f64;
-        for i in 0..(*self).individuals.len() {
-            sum_fitness += self.individuals[i].fitness;
-        }
-        sum_fitness / (self.individuals.len()as f64)
-
-    }
-
-    fn get_std(&self) {
-
-    }
-
-    fn get_random(&mut self) -> Individual {
-        let option = self.individuals.choose_mut(&mut rand::thread_rng());
-        match option {
-            Some(x) => (*x).clone(),
-            None => self.individuals[self.individuals.len()-1].clone()
-        }
-
-    }
-
-    fn sort(&mut self) {
-        self.individuals.sort_unstable_by(|x, y| x.fitness.partial_cmp(&y.fitness).unwrap());
-    }
-}
-
-
-#[cfg(test)]
-mod population_tests {
-    use super::*;
-
-    #[test]
-    fn basic_inst() {
-        let x = Population::new(&mut Settings::default());
-    }
-
-    #[test]
-    fn empty_inst() {
-        let x = Population::empty();
-    }
-
-    #[test]
-    fn sort_check() {
-        let mut x = Population::new(&mut Settings::default());
-        x.sort();
-    }
-
-    #[test]
-    fn stat_check() {
-        let x = Population::new(&mut Settings::default());
-        x.get_best();
-        x.get_mean();
-        x.get_std();
-    }
-}
-
-/// This structure is for an individual, essentially representative of a single solution
-pub struct Individual {
-    representation: Vec<f64>,
-    fitness: f64,
-}
-
-impl Individual {
-    /// This creates a new individual
-    fn new(sets: &mut crate::Settings) -> Self {
-        let mut rng = rand::thread_rng();
-        let mut v: Vec<f64> = vec![];
-        for i in 0..sets.number_of_dimensions as usize {
-            v.push(rng.gen_range(sets.lower_bound[i], sets.upper_bound[i]));
-        }
-        Self {
-            representation: v.clone(),
-            fitness: (sets.fitness_function)(v.clone())
-        }
-    }
-
-    /// This clones the Individual
-    fn clone(&self) -> Self {
-        Self {
-            representation: self.representation.clone(),
-            fitness: self.fitness,
-        }
-    }
-
-    /// This returns a mutated version of the Individual
-    fn mutate(&self) -> Self {
-        self.clone()
-    }
-
-    /// Crossover
-    fn cross(&self, other_individual: Self) -> Self {
-        let mut v = vec![];
-        let mut rng = rand::thread_rng();
-        for i in 0..self.representation.len() {
-            if rng.gen::<f64>() < 0.5 {
-                v.push(self.representation[i])
-            } else {
-                v.push(other_individual.representation[i])
-            }
-        }
-
-        Self {
-            representation: v,
-            fitness: 0.0
-        }
-
-    }
-}
-
-
-#[cfg(test)]
-mod individual_tests {
-    use super::*;
-
-    #[test]
-    fn basic_inst() {
-        let x = Individual {
-            representation: vec![0.0, 0.0],
-            fitness: 0.0
-        };
-    }
-
-    #[test]
-    fn settings_inst() {
-        let x = Individual::new(&mut crate::Settings::default());
-    }
-
-    #[test]
-    fn clone_check() {
-        let x = Individual::new(&mut crate::Settings::default());
-        let y = x.clone();
-    }
-
-    #[test]
-    fn mutate_check() {
-        let x = Individual::new(&mut crate::Settings::default());
-        let y = x.mutate();
     }
 }

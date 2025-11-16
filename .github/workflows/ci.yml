@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+
+jobs:
+  build:
+    name: Rust ${{ matrix.rust }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, beta, nightly]
+    continue-on-error: ${{ matrix.rust == 'nightly' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          components: clippy, rustfmt
+          override: true
+
+      - name: cargo fmt
+        run: cargo fmt -- --check
+
+      - name: cargo clippy
+        run: cargo clippy -- -D warnings -W clippy::pedantic
+
+      - name: cargo test
+        run: cargo test
