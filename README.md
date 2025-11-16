@@ -1,15 +1,34 @@
 ![CI](https://github.com/cmccomb/jeans/actions/workflows/ci.yml/badge.svg?branch=master)
-# About
 
-This is a crate for implementing genetic algorithms. Specifically, this is for algorithms whose solutions can be represented as a vector of floating point values, but that might change in the future.
+# jeans
 
-## Real-coded genetic algorithms
+`jeans` is a Rust crate for building evolutionary optimizers whose genomes are
+vectors of floating-point values. It ships ergonomic builders for
+real-coded and multi-objective engines plus a collection of interchangeable
+operators so you can assemble the GA that best fits your simulation workload.
 
-The [`RealGa`](https://docs.rs/jeans/latest/jeans/struct.RealGa.html) engine exposes a
-builder-style API that wires common real-coded GA operators together. It
-supports configuring the dimensionality/bounds via the provided [`Problem`],
-population size, SBX crossover, polynomial mutation, tournament selection, and
-flexible stop conditions. A minimal example looks like:
+- **Batteries included**: Stock selection, crossover, mutation, and stop
+  operators cover most classical GA workflows.
+- **Asynchronous friendly**: Expensive fitness functions can be evaluated via
+  Tokio-backed batching utilities.
+- **Single or multi-objective**: Switch between `RealGa` and `Nsga2` depending
+  on the problem type without rewriting your domain logic.
+
+## Installation
+
+Add the crate through Cargo:
+
+```bash
+cargo add jeans
+```
+
+The public API is documented on [docs.rs](https://docs.rs/jeans) and can be
+built locally with `cargo doc --open`.
+
+## Real-coded quick start
+
+`RealGa` wires together bounded problems, SBX crossover, polynomial mutation,
+and flexible stop conditions through a fluent builder:
 
 ```rust
 use jeans::{RealGa, StopCondition};
@@ -34,7 +53,8 @@ let problem = Sphere;
 let mut ga = RealGa::builder(problem)
     .population_size(20)
     .stop_condition(
-        StopCondition::target_fitness_below(1e-3).or(StopCondition::max_generations(250)),
+        StopCondition::target_fitness_below(1e-3)
+            .or(StopCondition::max_generations(250)),
     )
     .build()
     .unwrap();
@@ -43,10 +63,12 @@ let report = ga.run(&mut rng).unwrap();
 println!("best: {:?} => {}", report.best_solution, report.best_fitness);
 ```
 
+### Customizing operators
+
 The [`jeans::ops`](https://docs.rs/jeans/latest/jeans/ops/index.html) module
-ships several ready-to-use operators, including SBX and BLX-α crossover plus
-polynomial and Gaussian mutation. They can be plugged into the builder when you
-need different exploration dynamics:
+ships ready-to-use operators such as SBX/BLX-α crossover and polynomial or
+Gaussian mutation. Plug them into the builder when you need different
+exploration dynamics:
 
 ```rust
 use jeans::ops::{BlendAlphaCrossover, GaussianMutation};
@@ -64,15 +86,16 @@ let mut ga = RealGa::builder(problem)
     .build()?;
 ```
 
-### Asynchronous fitness evaluation
+## Asynchronous fitness evaluation
 
 Expensive simulations often expose asynchronous APIs. The
 [`jeans::r#async`](https://docs.rs/jeans/latest/jeans/r_async/index.html)
 module contains [`AsyncBatchEvaluator`], which batches calls to an
 [`AsyncProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.AsyncProblem.html)
-implementation and evaluates each candidate in a Tokio runtime. Engines such as
-[`RealGa`] automatically work with asynchronous evaluators because they depend
-on the [`SingleObjectiveEvaluator`](https://docs.rs/jeans/latest/jeans/r_async/trait.SingleObjectiveEvaluator.html)
+implementation and evaluates each candidate inside a Tokio runtime. Engines
+such as `RealGa` automatically work with asynchronous evaluators because they
+only depend on the
+[`SingleObjectiveEvaluator`](https://docs.rs/jeans/latest/jeans/r_async/trait.SingleObjectiveEvaluator.html)
 trait:
 
 ```rust
@@ -113,7 +136,7 @@ println!("best async fitness: {}", report.best_fitness);
 classic NSGA-II algorithm for problems that return multiple objectives. Define a
 [`MultiObjectiveProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.MultiObjectiveProblem.html)
 that exposes the bounds, number of objectives, and the evaluation routine, then
-configure the engine similarly to [`RealGa`]:
+configure the engine similarly to `RealGa`:
 
 ```rust
 use jeans::{MultiObjectiveProblem, Nsga2};
@@ -152,9 +175,22 @@ The crate ships runnable examples that showcase the higher-level engines:
 
 - `cargo run --example simple_ga` optimizes the Sphere function with explicit
   SBX crossover and polynomial mutation parameters.
-- `cargo run --example expensive_async` demonstrates building a
-  `tokio`-powered
+- `cargo run --example expensive_async` demonstrates building a Tokio-powered
   [`AsyncProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.AsyncProblem.html)
   that simulates an expensive evaluation before reporting fitness.
 - `cargo run --example nsga2_example` runs NSGA-II on a two-objective
   cantilever beam design study, reporting the first few Pareto-optimal designs.
+
+## Development
+
+Contributions are welcome! Please format, lint, and test before opening a pull
+request:
+
+```bash
+cargo fmt
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+```
+
+Running `cargo doc --no-deps` ensures the documentation keeps compiling during
+refactors.
