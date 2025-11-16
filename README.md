@@ -63,3 +63,42 @@ let mut ga = RealGa::builder(problem)
     .mutation(mutation)
     .build()?;
 ```
+
+## Multi-objective optimization
+
+[`Nsga2`](https://docs.rs/jeans/latest/jeans/struct.Nsga2.html) implements the
+classic NSGA-II algorithm for problems that return multiple objectives. Define a
+[`MultiObjectiveProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.MultiObjectiveProblem.html)
+that exposes the bounds, number of objectives, and the evaluation routine, then
+configure the engine similarly to [`RealGa`]:
+
+```rust
+use jeans::{MultiObjectiveProblem, Nsga2};
+use jeans::ops::{ProblemBounds, ProblemResult};
+use rand::SeedableRng;
+
+struct LinearFront;
+
+impl ProblemBounds for LinearFront {
+    fn dimensions(&self) -> usize { 1 }
+    fn lower_bounds(&self) -> &[f64] { &[0.0] }
+    fn upper_bounds(&self) -> &[f64] { &[1.0] }
+}
+
+impl MultiObjectiveProblem for LinearFront {
+    fn objectives(&self) -> usize { 2 }
+
+    fn evaluate(&mut self, genes: &[f64]) -> ProblemResult<Vec<f64>> {
+        Ok(vec![genes[0], 1.0 - genes[0]])
+    }
+}
+
+let problem = LinearFront;
+let mut engine = Nsga2::builder(problem)
+    .population_size(20)
+    .generations(25)
+    .build()?;
+let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+let report = engine.run(&mut rng)?;
+println!("found {} non-dominated solutions", report.pareto_solutions.len());
+```

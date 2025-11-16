@@ -236,6 +236,60 @@ impl<T: Problem + ?Sized> Problem for Box<T> {
     }
 }
 
+/// Trait implemented by multi-objective synchronous problems.
+///
+/// # Examples
+/// ```
+/// use jeans::ops::{MultiObjectiveProblem, ProblemBounds, ProblemResult};
+///
+/// struct LinearFront;
+///
+/// impl ProblemBounds for LinearFront {
+///     fn dimensions(&self) -> usize { 1 }
+///     fn lower_bounds(&self) -> &[f64] { &[0.0] }
+///     fn upper_bounds(&self) -> &[f64] { &[1.0] }
+/// }
+///
+/// impl MultiObjectiveProblem for LinearFront {
+///     fn objectives(&self) -> usize { 2 }
+///
+///     fn evaluate(&mut self, genes: &[f64]) -> ProblemResult<Vec<f64>> {
+///         let x = genes[0];
+///         Ok(vec![x, 1.0 - x])
+///     }
+/// }
+/// ```
+pub trait MultiObjectiveProblem: ProblemBounds {
+    /// Number of objectives evaluated by the problem.
+    fn objectives(&self) -> usize;
+
+    /// Evaluates the objective vector of the provided chromosome.
+    ///
+    /// # Errors
+    /// Implementations may return [`ProblemError`] to describe domain issues.
+    fn evaluate(&mut self, genes: &[f64]) -> ProblemResult<Vec<f64>>;
+}
+
+impl<T: MultiObjectiveProblem + ?Sized> MultiObjectiveProblem for &mut T {
+    fn objectives(&self) -> usize {
+        (**self).objectives()
+    }
+
+    fn evaluate(&mut self, genes: &[f64]) -> ProblemResult<Vec<f64>> {
+        (**self).evaluate(genes)
+    }
+}
+
+impl<T: MultiObjectiveProblem + ?Sized> MultiObjectiveProblem for Box<T> {
+    fn objectives(&self) -> usize {
+        (**self).objectives()
+    }
+
+    fn evaluate(&mut self, genes: &[f64]) -> ProblemResult<Vec<f64>> {
+        (**self).evaluate(genes)
+    }
+}
+
 /// Trait implemented by asynchronous problems.
 #[async_trait]
 pub trait AsyncProblem: ProblemBounds + Send + Sync {
@@ -287,6 +341,32 @@ mod tests {
         }
     }
 
+    struct BiObjective;
+
+    impl ProblemBounds for BiObjective {
+        fn dimensions(&self) -> usize {
+            1
+        }
+
+        fn lower_bounds(&self) -> &[f64] {
+            &[0.0]
+        }
+
+        fn upper_bounds(&self) -> &[f64] {
+            &[1.0]
+        }
+    }
+
+    impl MultiObjectiveProblem for BiObjective {
+        fn objectives(&self) -> usize {
+            2
+        }
+
+        fn evaluate(&mut self, genes: &[f64]) -> ProblemResult<Vec<f64>> {
+            Ok(vec![genes[0], 1.0 - genes[0]])
+        }
+    }
+
     struct AsyncTestProblem(TestProblem);
 
     impl ProblemBounds for AsyncTestProblem {
@@ -332,5 +412,12 @@ mod tests {
         let chromosome = Chromosome::new(vec![2.0, 3.0]);
         let score = block_on(problem.evaluate_chromosome_async(&chromosome)).unwrap();
         assert!((score - 6.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn multi_objective_evaluate_returns_vector() {
+        let mut problem = BiObjective;
+        let result = problem.evaluate(&[0.25]).unwrap();
+        assert_eq!(result, vec![0.25, 0.75]);
     }
 }

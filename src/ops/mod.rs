@@ -16,7 +16,9 @@ use std::fmt::{self, Display, Formatter};
 
 pub use crossover::{BlendAlphaCrossover, CrossoverOperator, SimulatedBinaryCrossover};
 pub use mutation::{GaussianMutation, MutationOperator, PolynomialMutation};
-pub use problem::{AsyncProblem, Problem, ProblemBounds, ProblemError, ProblemResult};
+pub use problem::{
+    AsyncProblem, MultiObjectiveProblem, Problem, ProblemBounds, ProblemError, ProblemResult,
+};
 pub use selection::SelectionOperator;
 
 /// Errors emitted by operator constructors.
