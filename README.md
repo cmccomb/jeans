@@ -45,6 +45,50 @@ println!("best drag coefficient: {}", report.best_fitness);
 
 The builder wires selection, variation, and termination so you stay focused on
 your physics model instead of plumbing GA components.
+### Asynchronous fitness evaluation
+
+Expensive simulations often expose asynchronous APIs. The
+[`jeans::r#async`](https://docs.rs/jeans/latest/jeans/r_async/index.html)
+module contains [`AsyncBatchEvaluator`], which batches calls to an
+[`AsyncProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.AsyncProblem.html)
+implementation and evaluates each candidate in a Tokio runtime. Engines such as
+[`RealGa`] automatically work with asynchronous evaluators because they depend
+on the [`SingleObjectiveEvaluator`](https://docs.rs/jeans/latest/jeans/r_async/trait.SingleObjectiveEvaluator.html)
+trait:
+
+```rust
+use async_trait::async_trait;
+use jeans::{RealGa, StopCondition};
+use jeans::ops::{AsyncProblem, ProblemBounds, ProblemResult};
+use jeans::r#async::AsyncBatchEvaluator;
+use rand::SeedableRng;
+
+struct DelayedSphere;
+
+impl ProblemBounds for DelayedSphere {
+    fn dimensions(&self) -> usize { 2 }
+    fn lower_bounds(&self) -> &[f64] { &[-5.0, -5.0] }
+    fn upper_bounds(&self) -> &[f64] { &[5.0, 5.0] }
+}
+
+#[async_trait]
+impl AsyncProblem for DelayedSphere {
+    async fn evaluate_async(&self, genes: &[f64]) -> ProblemResult<f64> {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        Ok(genes.iter().map(|value| value * value).sum())
+    }
+}
+
+let evaluator = AsyncBatchEvaluator::new(DelayedSphere)?;
+let mut ga = RealGa::builder(evaluator)
+    .stop_condition(StopCondition::max_generations(10))
+    .build()?;
+let mut rng = rand::rngs::StdRng::seed_from_u64(7);
+let report = ga.run(&mut rng)?;
+println!("best async fitness: {}", report.best_fitness);
+```
+
+## Multi-objective optimization
 
 ## SBX and polynomial mutation by default
 
@@ -78,3 +122,25 @@ library as the single-objective engine.
 - **Multi-objective support** – NSGA-II and reusable variation operators make it
   straightforward to reason about Pareto-optimal solutions without rewriting
   your evaluation stack.
+let problem = LinearFront;
+let mut engine = Nsga2::builder(problem)
+    .population_size(20)
+    .generations(25)
+    .build()?;
+let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+let report = engine.run(&mut rng)?;
+println!("found {} non-dominated solutions", report.pareto_solutions.len());
+```
+
+## Examples
+
+The crate ships runnable examples that showcase the higher-level engines:
+
+- `cargo run --example simple_ga` optimizes the Sphere function with explicit
+  SBX crossover and polynomial mutation parameters.
+- `cargo run --example expensive_async` demonstrates building a
+  `tokio`-powered
+  [`AsyncProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.AsyncProblem.html)
+  that simulates an expensive evaluation before reporting fitness.
+- `cargo run --example nsga2_example` runs NSGA-II on a two-objective
+  cantilever beam design study, reporting the first few Pareto-optimal designs.
