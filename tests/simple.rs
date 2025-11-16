@@ -1,5 +1,4 @@
 use benchfun::*;
-use jeans;
 
 #[test]
 fn simple() {

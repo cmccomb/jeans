@@ -735,12 +735,13 @@ mod tests {
     fn population_statistics_behave_reasonably() {
         let mut individuals = vec![];
         for idx in 0..5 {
-            let chromosome = Chromosome::new(vec![idx as Gene]);
-            individuals.push(Individual::from_parts(chromosome, idx as Gene));
+            let value = Gene::from(idx);
+            let chromosome = Chromosome::new(vec![value]);
+            individuals.push(Individual::from_parts(chromosome, value));
         }
         let population = Population { individuals };
-        assert_eq!(population.get_best(), 4.0);
-        assert_eq!(population.get_mean(), 2.0);
+        assert!((population.get_best() - 4.0).abs() < f64::EPSILON);
+        assert!((population.get_mean() - 2.0).abs() < f64::EPSILON);
         assert!(population.get_std() > 0.0);
         assert!(population.best_individual().is_some());
     }
