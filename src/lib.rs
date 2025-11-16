@@ -12,17 +12,19 @@ use std::convert::TryFrom;
 /// This imports a [related library](https://crates.io/crates/benchfun).
 use benchfun::SingleObjective;
 pub mod core;
+pub mod nsga2;
 pub mod ops;
 pub mod real_ga;
 pub use crate::core::{Chromosome, Gene, Individual, Population};
 pub use crate::ops::{
-    AsyncProblem, BlendAlphaCrossover, CrossoverOperator, GaussianMutation, MutationOperator,
-    OperatorError, PolynomialMutation, Problem, ProblemBounds, ProblemError, ProblemResult,
-    SelectionOperator, SimulatedBinaryCrossover,
+    AsyncProblem, BlendAlphaCrossover, CrossoverOperator, GaussianMutation, MultiObjectiveProblem,
+    MutationOperator, OperatorError, PolynomialMutation, Problem, ProblemBounds, ProblemError,
+    ProblemResult, SelectionOperator, SimulatedBinaryCrossover,
 };
 pub use crate::real_ga::{
     RealGa, RealGaBuilder, RealGaError, RealGaReport, StopCondition, TournamentSelection,
 };
+pub use nsga2::{Nsga2, Nsga2Builder, Nsga2Error, Nsga2Report};
 
 /// A settings object for storing all of the settings we might care about for a GA.
 ///
