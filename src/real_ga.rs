@@ -6,6 +6,9 @@
 //! conditions, and then call [`RealGa::run`] with a random number generator to
 //! perform the optimization.
 
+use crate::core::{
+    population_diversity_by, ExperimentMetadata, ExperimentResult, IndividualSnapshot, RunStats,
+};
 use crate::ops::{
     CrossoverOperator, MutationOperator, OperatorError, PolynomialMutation, Problem, ProblemError,
     SelectionOperator, SimulatedBinaryCrossover,
@@ -49,7 +52,10 @@ const DEFAULT_GENERATIONS: usize = 100;
 /// let mut rng = rand::rngs::StdRng::seed_from_u64(7);
 /// let report = ga.run(&mut rng).unwrap();
 /// assert!(report.best_fitness >= 0.0);
+/// assert_eq!(report.generations, report.experiment.metadata.generations);
+/// assert!(!report.experiment.stats.best_fitness.is_empty());
 /// ```
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct RealGaReport {
     /// Best chromosome discovered by the engine.
@@ -58,6 +64,8 @@ pub struct RealGaReport {
     pub best_fitness: f64,
     /// Number of generations executed before stopping.
     pub generations: usize,
+    /// Complete experimentation payload for downstream analysis.
+    pub experiment: ExperimentResult<f64>,
 }
 
 /// Errors produced by the [`RealGa`] engine or its default operators.
@@ -373,7 +381,10 @@ where
         let mut fitness = self.evaluate_population(&population)?;
         let mut best_solution = Vec::new();
         let mut best_fitness = f64::INFINITY;
-        Self::update_best(&population, &fitness, &mut best_solution, &mut best_fitness);
+        let mut has_best =
+            Self::update_best(&population, &fitness, &mut best_solution, &mut best_fitness);
+        let mut stats = RunStats::new();
+        record_scalar_stats(&mut stats, &population, &fitness);
         let mut generation = 0_usize;
         while !self.stop_condition.is_met(generation, best_fitness) {
             generation = generation.saturating_add(1);
@@ -399,12 +410,29 @@ where
             }
             population = offspring;
             fitness = self.evaluate_population(&population)?;
-            Self::update_best(&population, &fitness, &mut best_solution, &mut best_fitness);
+            has_best |=
+                Self::update_best(&population, &fitness, &mut best_solution, &mut best_fitness);
+            record_scalar_stats(&mut stats, &population, &fitness);
         }
+        let best_individual =
+            has_best.then(|| IndividualSnapshot::new(best_solution.clone(), best_fitness));
+        let final_population = population
+            .iter()
+            .zip(fitness.iter().copied())
+            .map(|(genes, fitness)| IndividualSnapshot::new(genes.clone(), fitness))
+            .collect();
+        let metadata = ExperimentMetadata::new(generation, None, std::any::type_name::<R>());
+        let experiment = ExperimentResult {
+            final_population,
+            best_individual,
+            stats,
+            metadata,
+        };
         Ok(RealGaReport {
             best_solution,
             best_fitness,
             generations: generation,
+            experiment,
         })
     }
 
@@ -448,7 +476,8 @@ where
         fitness: &[f64],
         best_solution: &mut Vec<f64>,
         best_fitness: &mut f64,
-    ) {
+    ) -> bool {
+        let mut improved = false;
         if let Some((idx, &value)) = fitness
             .iter()
             .enumerate()
@@ -457,12 +486,59 @@ where
             if value < *best_fitness {
                 *best_fitness = value;
                 best_solution.clone_from(&population[idx]);
+                improved = true;
             }
         }
+        improved
     }
 
     fn selection_scores(fitness: &[f64]) -> Vec<f64> {
         fitness.iter().map(|value| -*value).collect()
+    }
+}
+
+fn record_scalar_stats(stats: &mut RunStats<f64>, population: &[Vec<f64>], fitness: &[f64]) {
+    stats
+        .population_diversity
+        .push(population_diversity_by(population.len(), |idx| {
+            population[idx].as_slice()
+        }));
+    if fitness.is_empty() {
+        stats.best_fitness.push(f64::NAN);
+        stats.mean_fitness.push(f64::NAN);
+        stats.median_fitness.push(f64::NAN);
+        return;
+    }
+    stats.best_fitness.push(best_fitness_value(fitness));
+    stats.mean_fitness.push(mean_fitness_value(fitness));
+    stats.median_fitness.push(median_fitness_value(fitness));
+}
+
+fn best_fitness_value(values: &[f64]) -> f64 {
+    values.iter().copied().fold(f64::INFINITY, f64::min)
+}
+
+fn mean_fitness_value(values: &[f64]) -> f64 {
+    if values.is_empty() {
+        return f64::NAN;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    {
+        values.iter().sum::<f64>() / values.len() as f64
+    }
+}
+
+fn median_fitness_value(values: &[f64]) -> f64 {
+    if values.is_empty() {
+        return f64::NAN;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let mid = sorted.len() / 2;
+    if sorted.len() % 2 == 0 {
+        f64::midpoint(sorted[mid - 1], sorted[mid])
+    } else {
+        sorted[mid]
     }
 }
 
@@ -592,6 +668,13 @@ mod tests {
         assert!(report.generations <= 2);
         assert_eq!(report.best_solution.len(), 2);
         assert!(report.best_fitness.is_finite());
+        assert_eq!(report.generations, report.experiment.metadata.generations);
+        assert_eq!(report.experiment.final_population.len(), 6);
+        assert_eq!(
+            report.experiment.stats.generations(),
+            report.experiment.stats.best_fitness.len()
+        );
+        assert!(report.experiment.best_individual.is_some());
     }
 
     #[test]
@@ -626,5 +709,7 @@ mod tests {
         let report = ga.run(&mut rng).unwrap();
         assert_eq!(report.generations, 0);
         assert!(report.best_fitness <= 0.1);
+        assert_eq!(report.experiment.stats.best_fitness.len(), 1);
+        assert!(report.experiment.stats.population_diversity[0] <= 0.0);
     }
 }

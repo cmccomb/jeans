@@ -6,6 +6,9 @@
 //! customize the population size, number of generations, and the underlying
 //! operators.
 
+use crate::core::{
+    population_diversity_by, ExperimentMetadata, ExperimentResult, IndividualSnapshot, RunStats,
+};
 use crate::ops::{
     CrossoverOperator, MultiObjectiveProblem, MutationOperator, OperatorError, PolynomialMutation,
     ProblemError, SimulatedBinaryCrossover,
@@ -52,7 +55,10 @@ const DEFAULT_GENERATIONS: usize = 100;
 /// let report = engine.run(&mut rng).unwrap();
 /// assert!(!report.pareto_solutions.is_empty());
 /// assert_eq!(report.pareto_solutions.len(), report.pareto_objectives.len());
+/// assert_eq!(report.generations, report.experiment.metadata.generations);
+/// assert!(report.experiment.stats.generations() > 0);
 /// ```
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct Nsga2Report {
     /// Chromosomes found in the final Pareto front.
@@ -61,6 +67,8 @@ pub struct Nsga2Report {
     pub pareto_objectives: Vec<Vec<f64>>,
     /// Number of generations executed by [`Nsga2::run`].
     pub generations: usize,
+    /// Complete experimentation payload describing the full population.
+    pub experiment: ExperimentResult<Vec<f64>>,
 }
 
 /// Errors produced by the [`Nsga2`] engine.
@@ -341,14 +349,17 @@ where
         let mut population = self.initialize_population(rng);
         self.evaluate_population(&mut population)?;
         Self::assign_ranks_and_crowding(&mut population);
+        let mut stats = RunStats::new();
+        record_multiobjective_stats(&mut stats, &population);
         for _ in 0..self.generations {
             let mut offspring = self.generate_offspring(&population, rng);
             self.evaluate_population(&mut offspring)?;
             let mut combined = population;
             combined.append(&mut offspring);
             population = self.reduce_population(combined);
+            Self::assign_ranks_and_crowding(&mut population);
+            record_multiobjective_stats(&mut stats, &population);
         }
-        Self::assign_ranks_and_crowding(&mut population);
         let pareto_front = Self::front_indices(&population, 0);
         let pareto_solutions = pareto_front
             .iter()
@@ -358,10 +369,30 @@ where
             .iter()
             .map(|&idx| population[idx].objectives.clone())
             .collect();
+        let final_population = population
+            .iter()
+            .map(|individual| {
+                IndividualSnapshot::new(individual.genes.clone(), individual.objectives.clone())
+            })
+            .collect();
+        let best_individual = pareto_front.first().map(|&idx| {
+            IndividualSnapshot::new(
+                population[idx].genes.clone(),
+                population[idx].objectives.clone(),
+            )
+        });
+        let metadata = ExperimentMetadata::new(self.generations, None, std::any::type_name::<R>());
+        let experiment = ExperimentResult {
+            final_population,
+            best_individual,
+            stats,
+            metadata,
+        };
         Ok(Nsga2Report {
             pareto_solutions,
             pareto_objectives,
             generations: self.generations,
+            experiment,
         })
     }
 
@@ -623,6 +654,84 @@ fn random_index(len: usize, rng: &mut dyn RngCore) -> usize {
     }
 }
 
+fn record_multiobjective_stats(stats: &mut RunStats<Vec<f64>>, population: &[IndividualState]) {
+    stats
+        .population_diversity
+        .push(population_diversity_by(population.len(), |idx| {
+            population[idx].genes.as_slice()
+        }));
+    if population.is_empty() {
+        stats.best_fitness.push(Vec::new());
+        stats.mean_fitness.push(Vec::new());
+        stats.median_fitness.push(Vec::new());
+        return;
+    }
+    let objectives: Vec<&[f64]> = population
+        .iter()
+        .map(|individual| individual.objectives.as_slice())
+        .collect();
+    stats.best_fitness.push(component_wise_min(&objectives));
+    stats.mean_fitness.push(component_wise_mean(&objectives));
+    stats
+        .median_fitness
+        .push(component_wise_median(&objectives));
+}
+
+fn component_wise_min(objectives: &[&[f64]]) -> Vec<f64> {
+    let Some(first) = objectives.first() else {
+        return Vec::new();
+    };
+    let mut mins = first.to_vec();
+    for objective in &objectives[1..] {
+        for (idx, &value) in objective.iter().enumerate() {
+            if value < mins[idx] {
+                mins[idx] = value;
+            }
+        }
+    }
+    mins
+}
+
+fn component_wise_mean(objectives: &[&[f64]]) -> Vec<f64> {
+    if objectives.is_empty() {
+        return Vec::new();
+    }
+    let dims = objectives[0].len();
+    let mut means = vec![0.0; dims];
+    for objective in objectives {
+        for (idx, &value) in objective.iter().enumerate() {
+            means[idx] += value;
+        }
+    }
+    #[allow(clippy::cast_precision_loss)]
+    {
+        let count = objectives.len() as f64;
+        for mean in &mut means {
+            *mean /= count;
+        }
+    }
+    means
+}
+
+fn component_wise_median(objectives: &[&[f64]]) -> Vec<f64> {
+    if objectives.is_empty() {
+        return Vec::new();
+    }
+    let dims = objectives[0].len();
+    let mut medians = Vec::with_capacity(dims);
+    for dim in 0..dims {
+        let mut values: Vec<f64> = objectives.iter().map(|objective| objective[dim]).collect();
+        values.sort_by(f64::total_cmp);
+        let mid = values.len() / 2;
+        if values.len() % 2 == 0 {
+            medians.push(f64::midpoint(values[mid - 1], values[mid]));
+        } else {
+            medians.push(values[mid]);
+        }
+    }
+    medians
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -705,5 +814,9 @@ mod tests {
             report.pareto_solutions.len(),
             report.pareto_objectives.len()
         );
+        assert_eq!(report.generations, report.experiment.metadata.generations);
+        assert_eq!(report.experiment.final_population.len(), 8);
+        assert!(report.experiment.best_individual.is_some());
+        assert!(report.experiment.stats.generations() > 0);
     }
 }

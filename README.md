@@ -43,6 +43,28 @@ let report = ga.run(&mut rng).unwrap();
 println!("best: {:?} => {}", report.best_solution, report.best_fitness);
 ```
 
+### Experiment analytics
+
+Each `RealGaReport` and `Nsga2Report` now exposes an `experiment` payload that
+captures the final population, the best individual, and [`RunStats`](https://docs.rs/jeans/latest/jeans/struct.RunStats.html) time-series
+metrics such as the best/mean/median fitness plus a diversity score for every
+generation. These analytics simplify downstream visualization or checkpointing
+without requiring ad-hoc bookkeeping inside your optimization loop.
+
+The `experiment` field also records [`ExperimentMetadata`](https://docs.rs/jeans/latest/jeans/struct.ExperimentMetadata.html), including the number
+of generations that ran and a description of the RNG that was supplied to the
+engine. When you need to persist the payload, enable the optional `serde`
+feature:
+
+```toml
+jeans = { version = "0.1.4", features = ["serde"] }
+```
+
+```rust
+let report = ga.run(&mut rng)?;
+serde_json::to_string(&report.experiment)?;
+```
+
 The [`jeans::ops`](https://docs.rs/jeans/latest/jeans/ops/index.html) module
 ships several ready-to-use operators, including SBX and BLX-α crossover plus
 polynomial and Gaussian mutation. They can be plugged into the builder when you
