@@ -1,69 +1,50 @@
 ![CI](https://github.com/cmccomb/jeans/actions/workflows/ci.yml/badge.svg?branch=master)
-# About
 
-This is a crate for implementing genetic algorithms. Specifically, this is for algorithms whose solutions can be represented as a vector of floating point values, but that might change in the future.
+# jeans
 
-## Real-coded genetic algorithms
+`jeans` is an opinionated real-coded genetic algorithm (GA) engine for `Vec<f64>`
+solutions in expensive engineering simulations. Unlike the general-purpose
+frameworks in the Rust ecosystem—such as Radiate, genevo, or genalg—`jeans`
+focuses on pragmatic workflows for industrial design teams who need predictable
+operators, deterministic ergonomics, and built-in support for asynchronous
+evaluations across compute farms.
 
-The [`RealGa`](https://docs.rs/jeans/latest/jeans/struct.RealGa.html) engine exposes a
-builder-style API that wires common real-coded GA operators together. It
-supports configuring the dimensionality/bounds via the provided [`Problem`],
-population size, SBX crossover, polynomial mutation, tournament selection, and
-flexible stop conditions. A minimal example looks like:
+## Simple `f(&[f64]) -> f64` API
+
+The core `RealGa` builder accepts problems that expose dimensional bounds and a
+plain `f(&[f64]) -> f64` evaluation. You can bring your simulation code, wrap it
+in a struct implementing `Problem`, and immediately start optimizing:
 
 ```rust
 use jeans::{RealGa, StopCondition};
 use jeans::ops::{Problem, ProblemBounds, ProblemResult};
 use rand::SeedableRng;
 
-struct Sphere;
+struct DragReduction;
 
-impl ProblemBounds for Sphere {
-    fn dimensions(&self) -> usize { 2 }
-    fn lower_bounds(&self) -> &[f64] { &[-5.0, -5.0] }
-    fn upper_bounds(&self) -> &[f64] { &[5.0, 5.0] }
+impl ProblemBounds for DragReduction {
+    fn dimensions(&self) -> usize { 8 }
+    fn lower_bounds(&self) -> &[f64] { &[-1.0; 8] }
+    fn upper_bounds(&self) -> &[f64] { &[1.0; 8] }
 }
 
-impl Problem for Sphere {
+impl Problem for DragReduction {
     fn evaluate(&mut self, genes: &[f64]) -> ProblemResult<f64> {
-        Ok(genes.iter().map(|value| value * value).sum())
+        Ok(simulate_drag(genes))
     }
 }
 
-let problem = Sphere;
-let mut ga = RealGa::builder(problem)
-    .population_size(20)
-    .stop_condition(
-        StopCondition::target_fitness_below(1e-3).or(StopCondition::max_generations(250)),
-    )
-    .build()
-    .unwrap();
-let mut rng = rand::rngs::StdRng::seed_from_u64(7);
-let report = ga.run(&mut rng).unwrap();
-println!("best: {:?} => {}", report.best_solution, report.best_fitness);
-```
-
-The [`jeans::ops`](https://docs.rs/jeans/latest/jeans/ops/index.html) module
-ships several ready-to-use operators, including SBX and BLX-α crossover plus
-polynomial and Gaussian mutation. They can be plugged into the builder when you
-need different exploration dynamics:
-
-```rust
-use jeans::ops::{BlendAlphaCrossover, GaussianMutation};
-
-let crossover = BlendAlphaCrossover::new(0.3)?;
-let mutation = GaussianMutation::new(
-    problem.lower_bounds().to_vec(),
-    problem.upper_bounds().to_vec(),
-    0.15,
-    0.2,
-)?;
-let mut ga = RealGa::builder(problem)
-    .crossover(crossover)
-    .mutation(mutation)
+let mut ga = RealGa::builder(DragReduction)
+    .population_size(64)
+    .stop_condition(StopCondition::max_generations(200))
     .build()?;
+let mut rng = rand::rngs::StdRng::seed_from_u64(13);
+let report = ga.run(&mut rng)?;
+println!("best drag coefficient: {}", report.best_fitness);
 ```
 
+The builder wires selection, variation, and termination so you stay focused on
+your physics model instead of plumbing GA components.
 ### Asynchronous fitness evaluation
 
 Expensive simulations often expose asynchronous APIs. The
@@ -109,33 +90,38 @@ println!("best async fitness: {}", report.best_fitness);
 
 ## Multi-objective optimization
 
-[`Nsga2`](https://docs.rs/jeans/latest/jeans/struct.Nsga2.html) implements the
-classic NSGA-II algorithm for problems that return multiple objectives. Define a
-[`MultiObjectiveProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.MultiObjectiveProblem.html)
-that exposes the bounds, number of objectives, and the evaluation routine, then
-configure the engine similarly to [`RealGa`]:
+## SBX and polynomial mutation by default
 
-```rust
-use jeans::{MultiObjectiveProblem, Nsga2};
-use jeans::ops::{ProblemBounds, ProblemResult};
-use rand::SeedableRng;
+`jeans` defaults to simulated binary crossover (SBX) and polynomial mutation—the
+same operators proven on noisy engineering landscapes. They respect the provided
+bounds and expose tunable parameters when you need different exploration
+pressure, but you can be productive without touching a single knob.
 
-struct LinearFront;
+## Asynchronous evaluation focus
 
-impl ProblemBounds for LinearFront {
-    fn dimensions(&self) -> usize { 1 }
-    fn lower_bounds(&self) -> &[f64] { &[0.0] }
-    fn upper_bounds(&self) -> &[f64] { &[1.0] }
-}
+Expensive simulations rarely finish together. `jeans` treats async execution as a
+first-class concern: problems can spawn asynchronous evaluations, stream
+intermediate telemetry, and rely on scheduling hooks to saturate GPU clusters or
+simulation farms without custom infrastructure glue.
 
-impl MultiObjectiveProblem for LinearFront {
-    fn objectives(&self) -> usize { 2 }
+## NSGA-II multi-objective capabilities
 
-    fn evaluate(&mut self, genes: &[f64]) -> ProblemResult<Vec<f64>> {
-        Ok(vec![genes[0], 1.0 - genes[0]])
-    }
-}
+For trade studies with conflicting objectives, `jeans` includes a full
+[`Nsga2`](https://docs.rs/jeans/latest/jeans/struct.Nsga2.html) implementation.
+Define a `MultiObjectiveProblem` that returns a `Vec<f64>` and use the familiar
+builder interface to explore Pareto fronts while keeping the same operator
+library as the single-objective engine.
 
+## Design Goals
+
+- **Ergonomics** – Builder-style configuration, opinionated defaults, and tight
+  integration with `rand` keep the API approachable for engineers who are new to
+  genetic algorithms.
+- **Asynchronous execution** – Native async hooks minimize idle hardware time
+  when evaluating expensive CFD, FEA, or circuit simulations across clusters.
+- **Multi-objective support** – NSGA-II and reusable variation operators make it
+  straightforward to reason about Pareto-optimal solutions without rewriting
+  your evaluation stack.
 let problem = LinearFront;
 let mut engine = Nsga2::builder(problem)
     .population_size(20)
