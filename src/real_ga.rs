@@ -6,7 +6,10 @@
 //! conditions, and then call [`RealGa::run`] with a random number generator to
 //! perform the optimization.
 
-use crate::ops::{CrossoverOperator, MutationOperator, Problem, ProblemError, SelectionOperator};
+use crate::ops::{
+    CrossoverOperator, MutationOperator, OperatorError, PolynomialMutation, Problem, ProblemError,
+    SelectionOperator, SimulatedBinaryCrossover,
+};
 use rand::distributions::Uniform;
 use rand::{Rng, RngCore};
 use std::fmt::{self, Display, Formatter};
@@ -15,8 +18,6 @@ const DEFAULT_SBX_ETA: f64 = 15.0;
 const DEFAULT_POLY_ETA: f64 = 20.0;
 const DEFAULT_TOURNAMENT_SIZE: usize = 3;
 const DEFAULT_GENERATIONS: usize = 100;
-#[allow(clippy::cast_precision_loss)]
-const RNG_SCALE: f64 = 1.0 / (u64::MAX as f64 + 1.0);
 
 /// Reports produced after running [`RealGa::run`].
 ///
@@ -75,6 +76,15 @@ pub enum RealGaError {
     InvalidMutationProbability(f64),
     /// Tournament selection received an empty tournament size.
     InvalidTournamentSize(usize),
+    /// Operator parameter failed validation.
+    InvalidOperatorParameter {
+        /// Name of the operator reporting the error.
+        operator: &'static str,
+        /// Name of the invalid parameter.
+        parameter: &'static str,
+        /// Offending value.
+        value: f64,
+    },
     /// Selection operator failed to return parents for reproduction.
     SelectionFailed,
     /// Wrapper around [`crate::core::BoundsError`].
@@ -104,6 +114,16 @@ impl Display for RealGaError {
                     "mutation probability must be within [0, 1] (received {prob})"
                 )
             }
+            Self::InvalidOperatorParameter {
+                operator,
+                parameter,
+                value,
+            } => {
+                write!(
+                    f,
+                    "{operator} parameter {parameter} was invalid (received {value})"
+                )
+            }
             Self::InvalidTournamentSize(size) => {
                 write!(f, "tournament size must be at least one (received {size})")
             }
@@ -125,6 +145,37 @@ impl From<crate::core::BoundsError> for RealGaError {
 impl From<ProblemError> for RealGaError {
     fn from(err: ProblemError) -> Self {
         Self::Problem(err)
+    }
+}
+
+impl From<OperatorError> for RealGaError {
+    fn from(err: OperatorError) -> Self {
+        match err {
+            OperatorError::InvalidDistributionIndex { operator, value } => {
+                Self::InvalidDistributionIndex { operator, value }
+            }
+            OperatorError::InvalidProbability { operator, value } => {
+                if operator.contains("mutation") {
+                    Self::InvalidMutationProbability(value)
+                } else {
+                    Self::InvalidOperatorParameter {
+                        operator,
+                        parameter: "probability",
+                        value,
+                    }
+                }
+            }
+            OperatorError::InvalidParameter {
+                operator,
+                parameter,
+                value,
+            } => Self::InvalidOperatorParameter {
+                operator,
+                parameter,
+                value,
+            },
+            OperatorError::Bounds(err) => Self::Bounds(err),
+        }
     }
 }
 
@@ -415,147 +466,6 @@ where
     }
 }
 
-/// Simulated Binary Crossover (SBX) implementation.
-#[derive(Debug, Clone)]
-pub struct SimulatedBinaryCrossover {
-    distribution_index: f64,
-}
-
-impl SimulatedBinaryCrossover {
-    /// Creates a new SBX operator.
-    ///
-    /// # Errors
-    /// Returns [`RealGaError::InvalidDistributionIndex`] when the provided
-    /// distribution index is non-positive or not finite.
-    pub fn new(distribution_index: f64) -> Result<Self, RealGaError> {
-        if !(distribution_index.is_finite() && distribution_index > 0.0) {
-            return Err(RealGaError::InvalidDistributionIndex {
-                operator: "sbx",
-                value: distribution_index,
-            });
-        }
-        Ok(Self { distribution_index })
-    }
-
-    fn crossover_gene(&self, value_a: f64, value_b: f64, rng: &mut dyn RngCore) -> (f64, f64) {
-        if (value_a - value_b).abs() < f64::EPSILON {
-            return (value_a, value_b);
-        }
-        let u = random_unit(rng);
-        let beta = if u <= 0.5 {
-            (2.0 * u).powf(1.0 / (self.distribution_index + 1.0))
-        } else {
-            (2.0 * (1.0 - u)).powf(-1.0 / (self.distribution_index + 1.0))
-        };
-        let child1 = 0.5 * ((1.0 + beta) * value_a + (1.0 - beta) * value_b);
-        let child2 = 0.5 * ((1.0 - beta) * value_a + (1.0 + beta) * value_b);
-        (child1, child2)
-    }
-}
-
-impl CrossoverOperator for SimulatedBinaryCrossover {
-    fn crossover(
-        &self,
-        parent_a: &[f64],
-        parent_b: &[f64],
-        rng: &mut dyn RngCore,
-    ) -> (Vec<f64>, Vec<f64>) {
-        let mut child_a = Vec::with_capacity(parent_a.len());
-        let mut child_b = Vec::with_capacity(parent_b.len());
-        for (&value_a, &value_b) in parent_a.iter().zip(parent_b.iter()) {
-            let (gene_a, gene_b) = self.crossover_gene(value_a, value_b, rng);
-            child_a.push(gene_a);
-            child_b.push(gene_b);
-        }
-        (child_a, child_b)
-    }
-}
-
-/// Polynomial mutation operator that respects problem bounds.
-#[derive(Debug, Clone)]
-pub struct PolynomialMutation {
-    distribution_index: f64,
-    probability: f64,
-    lower_bounds: Vec<f64>,
-    upper_bounds: Vec<f64>,
-}
-
-impl PolynomialMutation {
-    /// Creates a new polynomial mutation operator.
-    ///
-    /// # Errors
-    /// Returns [`RealGaError`] when the distribution index or probability is
-    /// invalid, or when the bound vectors have mismatched lengths.
-    pub fn new(
-        lower_bounds: Vec<f64>,
-        upper_bounds: Vec<f64>,
-        distribution_index: f64,
-        probability: f64,
-    ) -> Result<Self, RealGaError> {
-        if !(distribution_index.is_finite() && distribution_index > 0.0) {
-            return Err(RealGaError::InvalidDistributionIndex {
-                operator: "polynomial mutation",
-                value: distribution_index,
-            });
-        }
-        if !(probability.is_finite() && (0.0..=1.0).contains(&probability)) {
-            return Err(RealGaError::InvalidMutationProbability(probability));
-        }
-        if lower_bounds.len() != upper_bounds.len() {
-            return Err(RealGaError::Bounds(
-                crate::core::BoundsError::DimensionMismatch {
-                    expected: lower_bounds.len(),
-                    found: upper_bounds.len(),
-                },
-            ));
-        }
-        Ok(Self {
-            distribution_index,
-            probability,
-            lower_bounds,
-            upper_bounds,
-        })
-    }
-}
-
-impl MutationOperator for PolynomialMutation {
-    fn mutate(&self, parent: &[f64], rng: &mut dyn RngCore) -> Vec<f64> {
-        let mut child = parent.to_vec();
-        for (idx, gene) in child.iter_mut().enumerate() {
-            let roll = random_unit(rng);
-            if roll > self.probability {
-                continue;
-            }
-            let lower = self.lower_bounds[idx];
-            let upper = self.upper_bounds[idx];
-            let range = upper - lower;
-            if range.abs() < f64::EPSILON {
-                *gene = lower;
-                continue;
-            }
-            let delta1 = (*gene - lower) / range;
-            let delta2 = (upper - *gene) / range;
-            let mut u = random_unit(rng);
-            let mut delta_q = if u <= 0.5 {
-                let term =
-                    2.0 * u + (1.0 - 2.0 * u) * (1.0 - delta1).powf(self.distribution_index + 1.0);
-                term.powf(1.0 / (self.distribution_index + 1.0)) - 1.0
-            } else {
-                u = 1.0 - u;
-                let term =
-                    2.0 * u + (1.0 - 2.0 * u) * (1.0 - delta2).powf(self.distribution_index + 1.0);
-                1.0 - term.powf(1.0 / (self.distribution_index + 1.0))
-            };
-            if !delta_q.is_finite() {
-                delta_q = 0.0;
-            }
-            *gene += delta_q * range;
-            *gene = gene.clamp(lower, upper);
-        }
-        child
-    }
-}
-
 /// Tournament selection that maximizes the provided fitness scores.
 #[derive(Debug, Clone)]
 pub struct TournamentSelection {
@@ -597,12 +507,6 @@ impl SelectionOperator for TournamentSelection {
         }
         best_idx
     }
-}
-
-fn random_unit(rng: &mut dyn RngCore) -> f64 {
-    #[allow(clippy::cast_precision_loss)]
-    let value = rng.next_u64() as f64;
-    value * RNG_SCALE
 }
 
 fn random_index(len: usize, rng: &mut dyn RngCore) -> usize {

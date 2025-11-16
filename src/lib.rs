@@ -16,12 +16,12 @@ pub mod ops;
 pub mod real_ga;
 pub use crate::core::{Chromosome, Gene, Individual, Population};
 pub use crate::ops::{
-    AsyncProblem, CrossoverOperator, MutationOperator, Problem, ProblemBounds, ProblemError,
-    ProblemResult, SelectionOperator,
+    AsyncProblem, BlendAlphaCrossover, CrossoverOperator, GaussianMutation, MutationOperator,
+    OperatorError, PolynomialMutation, Problem, ProblemBounds, ProblemError, ProblemResult,
+    SelectionOperator, SimulatedBinaryCrossover,
 };
 pub use crate::real_ga::{
-    PolynomialMutation, RealGa, RealGaBuilder, RealGaError, RealGaReport, SimulatedBinaryCrossover,
-    StopCondition, TournamentSelection,
+    RealGa, RealGaBuilder, RealGaError, RealGaReport, StopCondition, TournamentSelection,
 };
 
 /// A settings object for storing all of the settings we might care about for a GA.
