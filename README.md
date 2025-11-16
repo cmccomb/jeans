@@ -51,9 +51,10 @@ Expensive simulations often expose asynchronous APIs. The
 [`jeans::r#async`](https://docs.rs/jeans/latest/jeans/r_async/index.html)
 module contains [`AsyncBatchEvaluator`], which batches calls to an
 [`AsyncProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.AsyncProblem.html)
-implementation and evaluates each candidate in a Tokio runtime. Engines such as
-[`RealGa`] automatically work with asynchronous evaluators because they depend
-on the [`SingleObjectiveEvaluator`](https://docs.rs/jeans/latest/jeans/r_async/trait.SingleObjectiveEvaluator.html)
+implementation and evaluates each candidate inside a Tokio runtime. Engines
+such as `RealGa` automatically work with asynchronous evaluators because they
+only depend on the
+[`SingleObjectiveEvaluator`](https://docs.rs/jeans/latest/jeans/r_async/trait.SingleObjectiveEvaluator.html)
 trait:
 
 ```rust
@@ -138,9 +139,22 @@ The crate ships runnable examples that showcase the higher-level engines:
 
 - `cargo run --example simple_ga` optimizes the Sphere function with explicit
   SBX crossover and polynomial mutation parameters.
-- `cargo run --example expensive_async` demonstrates building a
-  `tokio`-powered
+- `cargo run --example expensive_async` demonstrates building a Tokio-powered
   [`AsyncProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.AsyncProblem.html)
   that simulates an expensive evaluation before reporting fitness.
 - `cargo run --example nsga2_example` runs NSGA-II on a two-objective
   cantilever beam design study, reporting the first few Pareto-optimal designs.
+
+## Development
+
+Contributions are welcome! Please format, lint, and test before opening a pull
+request:
+
+```bash
+cargo fmt
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+```
+
+Running `cargo doc --no-deps` ensures the documentation keeps compiling during
+refactors.
