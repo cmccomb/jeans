@@ -13,10 +13,15 @@ use std::convert::TryFrom;
 use benchfun::SingleObjective;
 pub mod core;
 pub mod ops;
+pub mod real_ga;
 pub use crate::core::{Chromosome, Gene, Individual, Population};
 pub use crate::ops::{
     AsyncProblem, CrossoverOperator, MutationOperator, Problem, ProblemBounds, ProblemError,
     ProblemResult, SelectionOperator,
+};
+pub use crate::real_ga::{
+    PolynomialMutation, RealGa, RealGaBuilder, RealGaError, RealGaReport, SimulatedBinaryCrossover,
+    StopCondition, TournamentSelection,
 };
 
 /// A settings object for storing all of the settings we might care about for a GA.
