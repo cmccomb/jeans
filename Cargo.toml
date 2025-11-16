@@ -19,3 +19,20 @@ async-trait = "0.1"
 
 [dev-dependencies]
 futures = "0.3"
+criterion = "0.5"
+
+[[bench]]
+name = "sphere"
+harness = false
+
+[[bench]]
+name = "rastrigin"
+harness = false
+
+[[bench]]
+name = "constrained"
+harness = false
+
+[[bench]]
+name = "zdt1"
+harness = false
