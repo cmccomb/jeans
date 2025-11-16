@@ -16,6 +16,7 @@ categories = ["algorithms", "mathematics", "science"]
 rand = "0.7.3"
 benchfun = "*"
 async-trait = "0.1"
+tokio = { version = "1.33", features = ["rt-multi-thread", "time"] }
 
 [dev-dependencies]
 futures = "0.3"

@@ -7,9 +7,10 @@
 //! perform the optimization.
 
 use crate::ops::{
-    CrossoverOperator, MutationOperator, OperatorError, PolynomialMutation, Problem, ProblemError,
+    CrossoverOperator, MutationOperator, OperatorError, PolynomialMutation, ProblemError,
     SelectionOperator, SimulatedBinaryCrossover,
 };
+use crate::r#async::{EvaluationError, SingleObjectiveEvaluator};
 use rand::distributions::Uniform;
 use rand::{Rng, RngCore};
 use std::fmt::{self, Display, Formatter};
@@ -91,6 +92,8 @@ pub enum RealGaError {
     Bounds(crate::core::BoundsError),
     /// Wrapper around [`ProblemError`].
     Problem(ProblemError),
+    /// Wrapper around asynchronous evaluation errors.
+    Evaluation(EvaluationError),
 }
 
 impl Display for RealGaError {
@@ -130,6 +133,7 @@ impl Display for RealGaError {
             Self::SelectionFailed => f.write_str("selection operator failed to provide parents"),
             Self::Bounds(err) => write!(f, "{err}"),
             Self::Problem(err) => write!(f, "{err}"),
+            Self::Evaluation(err) => write!(f, "{err}"),
         }
     }
 }
@@ -145,6 +149,15 @@ impl From<crate::core::BoundsError> for RealGaError {
 impl From<ProblemError> for RealGaError {
     fn from(err: ProblemError) -> Self {
         Self::Problem(err)
+    }
+}
+
+impl From<EvaluationError> for RealGaError {
+    fn from(err: EvaluationError) -> Self {
+        match err {
+            EvaluationError::Problem(problem) => Self::Problem(problem),
+            other => Self::Evaluation(other),
+        }
     }
 }
 
@@ -240,7 +253,7 @@ pub struct RealGaBuilder<P> {
 
 impl<P> RealGaBuilder<P>
 where
-    P: Problem,
+    P: SingleObjectiveEvaluator,
 {
     /// Configures the number of individuals per generation.
     #[must_use]
@@ -330,7 +343,7 @@ where
     }
 }
 
-/// Real-coded genetic algorithm engine that operates over a [`Problem`].
+/// Real-coded genetic algorithm engine that operates over a [`SingleObjectiveEvaluator`].
 pub struct RealGa<P> {
     problem: P,
     population_size: usize,
@@ -344,7 +357,7 @@ pub struct RealGa<P> {
 
 impl<P> RealGa<P>
 where
-    P: Problem,
+    P: SingleObjectiveEvaluator,
 {
     /// Creates a builder used to configure the engine.
     #[must_use]
@@ -436,11 +449,7 @@ where
     }
 
     fn evaluate_population(&mut self, population: &[Vec<f64>]) -> Result<Vec<f64>, RealGaError> {
-        let mut fitness = Vec::with_capacity(population.len());
-        for candidate in population {
-            fitness.push(self.problem.evaluate(candidate.as_slice())?);
-        }
-        Ok(fitness)
+        Ok(self.problem.evaluate_population(population)?)
     }
 
     fn update_best(
@@ -519,9 +528,12 @@ fn random_index(len: usize, rng: &mut dyn RngCore) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ops::ProblemBounds;
+    use crate::ops::{AsyncProblem, Problem, ProblemBounds};
+    use crate::r#async::AsyncBatchEvaluator;
+    use async_trait::async_trait;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use std::time::Duration;
 
     struct Sphere {
         lower: Vec<f64>,
@@ -626,5 +638,44 @@ mod tests {
         let report = ga.run(&mut rng).unwrap();
         assert_eq!(report.generations, 0);
         assert!(report.best_fitness <= 0.1);
+    }
+
+    #[test]
+    fn real_ga_handles_async_problems() {
+        struct AsyncSphere;
+
+        impl ProblemBounds for AsyncSphere {
+            fn dimensions(&self) -> usize {
+                2
+            }
+
+            fn lower_bounds(&self) -> &[f64] {
+                &[-5.0, -5.0]
+            }
+
+            fn upper_bounds(&self) -> &[f64] {
+                &[5.0, 5.0]
+            }
+        }
+
+        #[async_trait]
+        impl AsyncProblem for AsyncSphere {
+            async fn evaluate_async(&self, genes: &[f64]) -> crate::ops::ProblemResult<f64> {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+                Ok(genes.iter().map(|value| value * value).sum())
+            }
+        }
+
+        let evaluator = AsyncBatchEvaluator::with_max_concurrency(AsyncSphere, 2).unwrap();
+        let mut ga = RealGa::builder(evaluator)
+            .population_size(4)
+            .stop_condition(StopCondition::max_generations(1))
+            .build()
+            .unwrap();
+        let mut rng = StdRng::seed_from_u64(5);
+        let report = ga.run(&mut rng).unwrap();
+        assert_eq!(report.generations, 1);
+        assert_eq!(report.best_solution.len(), 2);
+        assert!(report.best_fitness.is_finite());
     }
 }

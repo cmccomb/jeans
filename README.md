@@ -64,6 +64,49 @@ let mut ga = RealGa::builder(problem)
     .build()?;
 ```
 
+### Asynchronous fitness evaluation
+
+Expensive simulations often expose asynchronous APIs. The
+[`jeans::r#async`](https://docs.rs/jeans/latest/jeans/r_async/index.html)
+module contains [`AsyncBatchEvaluator`], which batches calls to an
+[`AsyncProblem`](https://docs.rs/jeans/latest/jeans/ops/trait.AsyncProblem.html)
+implementation and evaluates each candidate in a Tokio runtime. Engines such as
+[`RealGa`] automatically work with asynchronous evaluators because they depend
+on the [`SingleObjectiveEvaluator`](https://docs.rs/jeans/latest/jeans/r_async/trait.SingleObjectiveEvaluator.html)
+trait:
+
+```rust
+use async_trait::async_trait;
+use jeans::{RealGa, StopCondition};
+use jeans::ops::{AsyncProblem, ProblemBounds, ProblemResult};
+use jeans::r#async::AsyncBatchEvaluator;
+use rand::SeedableRng;
+
+struct DelayedSphere;
+
+impl ProblemBounds for DelayedSphere {
+    fn dimensions(&self) -> usize { 2 }
+    fn lower_bounds(&self) -> &[f64] { &[-5.0, -5.0] }
+    fn upper_bounds(&self) -> &[f64] { &[5.0, 5.0] }
+}
+
+#[async_trait]
+impl AsyncProblem for DelayedSphere {
+    async fn evaluate_async(&self, genes: &[f64]) -> ProblemResult<f64> {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        Ok(genes.iter().map(|value| value * value).sum())
+    }
+}
+
+let evaluator = AsyncBatchEvaluator::new(DelayedSphere)?;
+let mut ga = RealGa::builder(evaluator)
+    .stop_condition(StopCondition::max_generations(10))
+    .build()?;
+let mut rng = rand::rngs::StdRng::seed_from_u64(7);
+let report = ga.run(&mut rng)?;
+println!("best async fitness: {}", report.best_fitness);
+```
+
 ## Multi-objective optimization
 
 [`Nsga2`](https://docs.rs/jeans/latest/jeans/struct.Nsga2.html) implements the
