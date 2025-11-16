@@ -1,9 +1,8 @@
-use jeans;
 use benchfun::*;
+use jeans;
 
 #[test]
 fn simple() {
-
     // Instantiate and define settings
     let settings = jeans::Settings::default();
 
