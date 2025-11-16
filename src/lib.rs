@@ -12,7 +12,12 @@ use std::convert::TryFrom;
 /// This imports a [related library](https://crates.io/crates/benchfun).
 use benchfun::SingleObjective;
 pub mod core;
+pub mod ops;
 pub use crate::core::{Chromosome, Gene, Individual, Population};
+pub use crate::ops::{
+    AsyncProblem, CrossoverOperator, MutationOperator, Problem, ProblemBounds, ProblemError,
+    ProblemResult, SelectionOperator,
+};
 
 /// A settings object for storing all of the settings we might care about for a GA.
 ///
