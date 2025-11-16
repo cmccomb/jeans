@@ -15,3 +15,7 @@ categories = ["algorithms", "mathematics", "science"]
 [dependencies]
 rand = "0.7.3"
 benchfun = "*"
+async-trait = "0.1"
+
+[dev-dependencies]
+futures = "0.3"
