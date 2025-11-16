@@ -39,6 +39,9 @@ fn nsga2_finds_non_dominated_solutions() {
     let mut rng = rand::rngs::StdRng::seed_from_u64(13);
     let report = engine.run(&mut rng).unwrap();
     assert!(!report.pareto_objectives.is_empty());
+    assert_eq!(report.generations, report.experiment.metadata.generations);
+    assert_eq!(report.experiment.final_population.len(), 12);
+    assert!(report.experiment.stats.generations() > 0);
     for (idx, objectives) in report.pareto_objectives.iter().enumerate() {
         for (other_idx, other) in report.pareto_objectives.iter().enumerate() {
             if idx == other_idx {

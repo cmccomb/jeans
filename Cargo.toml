@@ -12,10 +12,15 @@ license = "MIT OR Apache-2.0"
 keywords = ["optimization", "genetic", "heuristic", "stochastic"]
 categories = ["algorithms", "mathematics", "science"]
 
+[features]
+default = []
+serde = ["dep:serde"]
+
 [dependencies]
 rand = "0.7.3"
 benchfun = "*"
 async-trait = "0.1"
+serde = { version = "1", features = ["derive"], optional = true }
 tokio = { version = "1.33", features = ["rt-multi-thread", "time"] }
 
 [dev-dependencies]

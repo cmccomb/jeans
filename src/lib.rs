@@ -16,7 +16,10 @@ pub mod core;
 pub mod nsga2;
 pub mod ops;
 pub mod real_ga;
-pub use crate::core::{Chromosome, Gene, Individual, Population};
+pub use crate::core::{
+    Chromosome, ExperimentMetadata, ExperimentResult, Gene, Individual, IndividualSnapshot,
+    Population, RunStats,
+};
 pub use crate::ops::{
     AsyncProblem, BlendAlphaCrossover, CrossoverOperator, GaussianMutation, MultiObjectiveProblem,
     MutationOperator, OperatorError, PolynomialMutation, Problem, ProblemBounds, ProblemError,

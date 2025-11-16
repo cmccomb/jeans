@@ -5,6 +5,10 @@
 //! lightweight and focused on correctness so they can be re-used in tests or
 //! in bespoke experimentation.
 
+mod experiment;
+
+pub(crate) use self::experiment::population_diversity_by;
+pub use self::experiment::{ExperimentMetadata, ExperimentResult, IndividualSnapshot, RunStats};
 use rand::distributions::{Distribution, Uniform};
 use rand::seq::SliceRandom;
 use rand::Rng;

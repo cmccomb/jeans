@@ -1,6 +1,6 @@
 //! Asynchronous evaluation helpers for genetic algorithm engines.
 //!
-//! The types in this module bridge [`AsyncProblem`](crate::ops::AsyncProblem)
+//! The types in this module bridge [`AsyncProblem`]
 //! implementations with the synchronous engines shipped by the crate. They
 //! spawn Tokio tasks to evaluate fitness in parallel and expose a
 //! [`SingleObjectiveEvaluator`] trait that both synchronous and asynchronous
