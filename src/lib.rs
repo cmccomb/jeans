@@ -11,6 +11,7 @@ use std::convert::TryFrom;
 
 /// This imports a [related library](https://crates.io/crates/benchfun).
 use benchfun::SingleObjective;
+pub mod r#async;
 pub mod core;
 pub mod nsga2;
 pub mod ops;
@@ -23,6 +24,10 @@ pub use crate::ops::{
     AsyncProblem, BlendAlphaCrossover, CrossoverOperator, GaussianMutation, MultiObjectiveProblem,
     MutationOperator, OperatorError, PolynomialMutation, Problem, ProblemBounds, ProblemError,
     ProblemResult, SelectionOperator, SimulatedBinaryCrossover,
+};
+pub use crate::r#async::{
+    AsyncBatchEvaluator, AsyncEvaluatorError, EvaluationError, EvaluationResult,
+    SingleObjectiveEvaluator,
 };
 pub use crate::real_ga::{
     RealGa, RealGaBuilder, RealGaError, RealGaReport, StopCondition, TournamentSelection,

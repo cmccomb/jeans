@@ -21,6 +21,25 @@ rand = "0.7.3"
 benchfun = "*"
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"], optional = true }
+tokio = { version = "1.33", features = ["rt-multi-thread", "time"] }
 
 [dev-dependencies]
 futures = "0.3"
+tokio = { version = "1", features = ["macros", "rt", "time"] }
+criterion = "0.5"
+
+[[bench]]
+name = "sphere"
+harness = false
+
+[[bench]]
+name = "rastrigin"
+harness = false
+
+[[bench]]
+name = "constrained"
+harness = false
+
+[[bench]]
+name = "zdt1"
+harness = false
