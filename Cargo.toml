@@ -1,9 +1,9 @@
 [package]
 name = "jeans"
 readme = "README.md"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Chris McComb <ccmcc2012@gmail.com>"]
-edition = "2018"
+edition = "2021"
 repository = "https://github.com/cmccomb/jeans"
 homepage = "https://github.com/cmccomb/jeans"
 documentation = "http://docs.rs/jeans"

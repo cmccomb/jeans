@@ -1,4 +1,6 @@
 ![CI](https://github.com/cmccomb/jeans/actions/workflows/ci.yml/badge.svg?branch=master)
+[![Crates.io](https://img.shields.io/crates/v/jeans.svg)](https://crates.io/crates/jeans)
+[![docs.rs](https://img.shields.io/docsrs/jeans/latest?logo=rust)](https://docs.rs/jeans)
 
 # jeans
 
