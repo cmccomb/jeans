@@ -27,6 +27,7 @@ tokio = { version = "1.33", features = ["rt-multi-thread", "time"] }
 futures = "0.3"
 tokio = { version = "1", features = ["macros", "rt", "time"] }
 criterion = "0.5"
+trussx = "0.2"
 
 [[bench]]
 name = "sphere"

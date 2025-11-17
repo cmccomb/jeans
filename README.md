@@ -172,6 +172,9 @@ The crate ships runnable examples that showcase the higher-level engines:
   that simulates an expensive evaluation before reporting fitness.
 - `cargo run --example nsga2_example` runs NSGA-II on a two-objective
   cantilever beam design study, reporting the first few Pareto-optimal designs.
+- `cargo run --example trussx_cantilever` sizes a three-member cantilever using
+  the [`trussx`](https://crates.io/crates/trussx) structural solver, balancing
+  lightweight members against a tip-deflection penalty.
 
 ## Development
 
