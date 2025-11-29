@@ -119,6 +119,56 @@ println!("best async fitness: {}", report.best_fitness);
 
 ## Multi-objective optimization
 
+When you need Pareto-optimal trade studies instead of a single best answer,
+implement the `MultiObjectiveProblem` trait and drive it with the
+[`Nsga2`](https://docs.rs/jeans/latest/jeans/struct.Nsga2.html) engine. The
+builder mirrors the single-objective API while returning an
+[`Nsga2Report`](https://docs.rs/jeans/latest/jeans/struct.Nsga2Report.html)
+that exposes both the decision vectors (`pareto_solutions`) and their
+corresponding objective values (`pareto_objectives`):
+
+```rust
+use jeans::ops::{MultiObjectiveProblem, ProblemBounds, ProblemResult};
+use jeans::Nsga2;
+use rand::SeedableRng;
+
+struct LinearFront;
+
+impl ProblemBounds for LinearFront {
+    fn dimensions(&self) -> usize { 1 }
+    fn lower_bounds(&self) -> &[f64] { &[0.0] }
+    fn upper_bounds(&self) -> &[f64] { &[1.0] }
+}
+
+impl MultiObjectiveProblem for LinearFront {
+    fn objectives(&self) -> usize { 2 }
+
+    fn evaluate(&mut self, genes: &[f64]) -> ProblemResult<Vec<f64>> {
+        let x = genes[0];
+        Ok(vec![x, 1.0 - x])
+    }
+}
+
+let problem = LinearFront;
+let mut engine = Nsga2::builder(problem)
+    .population_size(20)
+    .generations(25)
+    .build()?;
+let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+let report = engine.run(&mut rng)?;
+
+for (solution, objectives) in report
+    .pareto_solutions
+    .iter()
+    .zip(report.pareto_objectives.iter())
+{
+    println!(
+        "solution {:?} => objective_0 {:.3}, objective_1 {:.3}",
+        solution, objectives[0], objectives[1]
+    );
+}
+```
+
 ## SBX and polynomial mutation by default
 
 `jeans` defaults to simulated binary crossover (SBX) and polynomial mutation—the
@@ -151,15 +201,6 @@ library as the single-objective engine.
 - **Multi-objective support** – NSGA-II and reusable variation operators make it
   straightforward to reason about Pareto-optimal solutions without rewriting
   your evaluation stack.
-let problem = LinearFront;
-let mut engine = Nsga2::builder(problem)
-    .population_size(20)
-    .generations(25)
-    .build()?;
-let mut rng = rand::rngs::StdRng::seed_from_u64(42);
-let report = engine.run(&mut rng)?;
-println!("found {} non-dominated solutions", report.pareto_solutions.len());
-```
 
 ## Examples
 
