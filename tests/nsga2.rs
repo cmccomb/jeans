@@ -50,10 +50,6 @@ fn nsga2_finds_non_dominated_solutions() {
             assert!(
                 !dominates(other, objectives),
                 "solution {other_idx} dominates {idx}: {other:?} vs {objectives:?}",
-                other_idx = other_idx,
-                idx = idx,
-                other = other,
-                objectives = objectives,
             );
         }
     }

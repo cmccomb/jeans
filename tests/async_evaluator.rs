@@ -1,3 +1,10 @@
+// These fixtures use exactly representable integer-valued genes as job IDs.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::float_cmp
+)]
+
 use async_trait::async_trait;
 use jeans::r#async::{AsyncBatchEvaluator, AsyncEvaluatorError, EvaluationError};
 use jeans::{AsyncProblem, ProblemBounds, ProblemResult, SingleObjectiveEvaluator};
@@ -129,4 +136,92 @@ async fn rejects_zero_concurrency() {
         }
         Ok(_) => panic!("zero concurrency should not construct an evaluator"),
     }
+}
+
+struct RollingProblem(Arc<tokio::sync::Notify>);
+
+impl ProblemBounds for RollingProblem {
+    fn dimensions(&self) -> usize {
+        1
+    }
+    fn lower_bounds(&self) -> &[f64] {
+        &[0.0]
+    }
+    fn upper_bounds(&self) -> &[f64] {
+        &[2.0]
+    }
+}
+
+#[async_trait]
+impl AsyncProblem for RollingProblem {
+    async fn evaluate_async(&self, genes: &[f64]) -> ProblemResult<f64> {
+        if genes[0] == 0.0 {
+            tokio::time::timeout(Duration::from_secs(2), self.0.notified())
+                .await
+                .expect("third candidate must start before the first finishes");
+        } else if genes[0] == 2.0 {
+            self.0.notify_one();
+        }
+        Ok(genes[0])
+    }
+}
+
+#[test]
+fn completed_jobs_are_replaced_without_waiting_for_slow_peers() {
+    let mut evaluator = AsyncBatchEvaluator::with_max_concurrency(
+        RollingProblem(Arc::new(tokio::sync::Notify::new())),
+        2,
+    )
+    .unwrap();
+    let scores = evaluator
+        .evaluate_population(&[vec![0.0], vec![1.0], vec![2.0]])
+        .unwrap();
+    assert_eq!(scores, vec![0.0, 1.0, 2.0]);
+}
+
+struct CancelProblem(Arc<AtomicUsize>);
+
+struct InFlight(Arc<AtomicUsize>);
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl ProblemBounds for CancelProblem {
+    fn dimensions(&self) -> usize {
+        1
+    }
+    fn lower_bounds(&self) -> &[f64] {
+        &[0.0]
+    }
+    fn upper_bounds(&self) -> &[f64] {
+        &[1.0]
+    }
+}
+
+#[async_trait]
+impl AsyncProblem for CancelProblem {
+    async fn evaluate_async(&self, genes: &[f64]) -> ProblemResult<f64> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        let _guard = InFlight(Arc::clone(&self.0));
+        if genes[0] == 0.0 {
+            sleep(Duration::from_millis(20)).await;
+            panic!("cancel sibling jobs");
+        }
+        sleep(Duration::from_secs(30)).await;
+        Ok(1.0)
+    }
+}
+
+#[test]
+fn a_failed_batch_cancels_and_drains_remaining_jobs() {
+    let count = Arc::new(AtomicUsize::new(0));
+    let mut evaluator =
+        AsyncBatchEvaluator::with_max_concurrency(CancelProblem(Arc::clone(&count)), 2).unwrap();
+    assert!(evaluator
+        .evaluate_population(&[vec![0.0], vec![1.0]])
+        .is_err());
+    assert_eq!(count.load(Ordering::SeqCst), 0);
+    assert!(evaluator.evaluate_population(&[]).unwrap().is_empty());
 }

@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use jeans::ops::{MultiObjectiveProblem, ProblemBounds, ProblemError, ProblemResult};
+use jeans::ops::{MultiObjectiveProblem, ProblemBounds, ProblemResult};
 use jeans::Nsga2;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -43,20 +43,9 @@ impl MultiObjectiveProblem for Zdt1 {
 
     fn evaluate(&mut self, genes: &[f64]) -> ProblemResult<Vec<f64>> {
         self.validate_candidate_length(genes.len())?;
-        let f1 = genes[0];
-        let sum_tail: f64 = genes.iter().skip(1).sum();
-        let dims = self.dimensions();
-        #[allow(clippy::cast_precision_loss)]
-        let denominator = (dims - 1) as f64;
-        if denominator == 0.0 {
-            return Err(ProblemError::DimensionMismatch {
-                expected: 2,
-                found: dims,
-            });
-        }
-        let g = 1.0 + (9.0 / denominator) * sum_tail;
-        let h = 1.0 - (f1 / g).sqrt();
-        Ok(vec![f1, g * h])
+        Ok(<benchfun::Zdt1 as benchfun::MultiObjective>::f(
+            genes.to_vec(),
+        ))
     }
 }
 
