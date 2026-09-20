@@ -4,12 +4,9 @@
 
 # jeans
 
-`jeans` is an opinionated real-coded genetic algorithm (GA) engine for `Vec<f64>`
-solutions in expensive engineering simulations. Unlike the general-purpose
-frameworks in the Rust ecosystem—such as Radiate, genevo, or genalg—`jeans`
-focuses on pragmatic workflows for industrial design teams who need predictable
-operators, deterministic ergonomics, and built-in support for asynchronous
-evaluations across compute farms.
+`jeans` provides real-coded genetic algorithms for `Vec<f64>` solutions,
+with bounded operators, seeded runs, asynchronous fitness evaluation, and
+NSGA-II for multi-objective engineering studies.
 
 ## Simple `f(&[f64]) -> f64` API
 
@@ -59,7 +56,7 @@ engine. When you need to persist the payload, enable the optional `serde`
 feature:
 
 ```toml
-jeans = { version = "0.1.4", features = ["serde"] }
+jeans = { version = "0.2.0", features = ["serde"] }
 ```
 
 ```rust
@@ -178,10 +175,11 @@ pressure, but you can be productive without touching a single knob.
 
 ## Asynchronous evaluation focus
 
-Expensive simulations rarely finish together. `jeans` treats async execution as a
-first-class concern: problems can spawn asynchronous evaluations, stream
-intermediate telemetry, and rely on scheduling hooks to saturate GPU clusters or
-simulation farms without custom infrastructure glue.
+`AsyncBatchEvaluator` limits concurrent evaluations and fills a free slot as
+soon as a job completes. Results retain candidate order. A failed evaluation
+cancels and drains the remaining local tasks before returning the error. If an
+evaluation submits work to an external service, its implementation remains
+responsible for propagating cancellation to that service.
 
 ## NSGA-II multi-objective capabilities
 
@@ -225,8 +223,10 @@ request:
 ```bash
 cargo fmt
 cargo clippy --all-targets --all-features -- -D warnings
-cargo test
+cargo test --all-features
 ```
 
 Running `cargo doc --no-deps` ensures the documentation keeps compiling during
 refactors.
+
+See [release notes](CHANGELOG.md) for the 0.2 migration and benchmark dependency.

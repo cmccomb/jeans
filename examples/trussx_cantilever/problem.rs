@@ -58,12 +58,16 @@ impl CantileverSizingProblem {
         }
     }
 
-    fn invalid_penalty(&self) -> f64 {
-        INVALID_PENALTY
-    }
-
     fn analyze_candidate(&self, areas: &[f64]) -> Result<(f64, f64), ()> {
+        if areas.len() != self.dimensions()
+            || areas.iter().any(|area| !area.is_finite() || *area <= 0.0)
+        {
+            return Err(());
+        }
         let mut truss = Truss::new();
+        // The example accounts for member weight in its objective; the analysis
+        // applies only the specified tip load, matching the original model.
+        truss.set_gravity([0.0; 3]).map_err(|_| ())?;
         let base = truss.add_joint(point(0.0, 0.0, 0.0));
         let roller = truss.add_joint(point(2.0, 0.0, 0.0));
         let tip = truss.add_joint(point(2.0, 1.0, 0.0));
@@ -148,7 +152,7 @@ impl Problem for CantileverSizingProblem {
 
         match self.analyze_candidate(genes) {
             Ok((fitness, _)) => Ok(fitness),
-            Err(_) => Ok(self.invalid_penalty()),
+            Err(()) => Ok(INVALID_PENALTY),
         }
     }
 }

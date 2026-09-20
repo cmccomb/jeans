@@ -7,13 +7,13 @@
 //! problems can implement, allowing engines to switch between evaluation modes
 //! without changing their core logic.
 
-use crate::ops::{AsyncProblem, Problem, ProblemBounds, ProblemError, ProblemResult};
+use crate::ops::{AsyncProblem, Problem, ProblemBounds, ProblemError};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::sync::Arc;
 use std::thread;
 use tokio::runtime::{Builder, Runtime};
-use tokio::task::JoinHandle;
+use tokio::task::JoinSet;
 
 /// Result type produced by [`SingleObjectiveEvaluator`] implementations.
 pub type EvaluationResult<T> = Result<T, EvaluationError>;
@@ -165,32 +165,38 @@ where
     }
 
     async fn evaluate_batch(&self, population: &[Vec<f64>]) -> EvaluationResult<Vec<f64>> {
-        let mut pending: Vec<JoinHandle<ProblemResult<(usize, f64)>>> = Vec::new();
+        let mut pending = JoinSet::new();
         let mut fitness = vec![0.0_f64; population.len()];
-        for (idx, candidate) in population.iter().enumerate() {
-            let problem = Arc::clone(&self.problem);
-            let genes = candidate.clone();
-            pending.push(tokio::spawn(async move {
-                let score = problem.evaluate_async(genes.as_slice()).await?;
-                Ok((idx, score))
-            }));
-            if pending.len() >= self.max_tasks {
-                Self::resolve_handles(&mut pending, &mut fitness).await?;
+        let mut candidates = population.iter().enumerate();
+        loop {
+            while pending.len() < self.max_tasks {
+                let Some((idx, candidate)) = candidates.next() else {
+                    break;
+                };
+                let problem = Arc::clone(&self.problem);
+                let genes = candidate.clone();
+                pending.spawn(async move {
+                    let score = problem.evaluate_async(genes.as_slice()).await?;
+                    Ok::<_, ProblemError>((idx, score))
+                });
+            }
+            let Some(result) = pending.join_next().await else {
+                break;
+            };
+            match result
+                .map_err(EvaluationError::from)
+                .and_then(|r| r.map_err(EvaluationError::from))
+            {
+                Ok((idx, score)) => fitness[idx] = score,
+                Err(error) => {
+                    // Do not leave detached evaluations running after a failed generation.
+                    pending.abort_all();
+                    while pending.join_next().await.is_some() {}
+                    return Err(error);
+                }
             }
         }
-        Self::resolve_handles(&mut pending, &mut fitness).await?;
         Ok(fitness)
-    }
-
-    async fn resolve_handles(
-        pending: &mut Vec<JoinHandle<ProblemResult<(usize, f64)>>>,
-        fitness: &mut [f64],
-    ) -> EvaluationResult<()> {
-        while let Some(handle) = pending.pop() {
-            let (idx, score) = handle.await??;
-            fitness[idx] = score;
-        }
-        Ok(())
     }
 }
 
@@ -223,6 +229,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ops::ProblemResult;
     use async_trait::async_trait;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;

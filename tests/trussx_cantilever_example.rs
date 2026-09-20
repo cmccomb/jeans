@@ -37,3 +37,18 @@ fn thicker_members_reduce_penalty() {
         "stiffer members should reduce tip deflection"
     );
 }
+
+#[test]
+fn rejects_invalid_area_vectors() {
+    let mut problem = CantileverSizingProblem::new();
+    assert!(problem.evaluate(&[1e-4]).is_err());
+    for areas in [
+        vec![],
+        vec![1e-4; 2],
+        vec![1e-4; 4],
+        vec![f64::NAN; 3],
+        vec![-1.0; 3],
+    ] {
+        assert!(problem.analyze_with_deflection(&areas).is_none());
+    }
+}
